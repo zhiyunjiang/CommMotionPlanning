@@ -5,7 +5,7 @@ classdef IObstacle < handle & matlab.mixin.Heterogeneous
     %segement with end points a and b
     methods(Abstract)
         obstructs(obj, a, b)
-        plotObstacle(obj, scale)
+        plotObstacle(obj, scale, offset)
     end
     
     methods (Access = protected, Static = true)

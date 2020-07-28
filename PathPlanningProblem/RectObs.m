@@ -56,12 +56,12 @@ classdef RectObs < IObstacle
 
         end
 
-        function plotObstacle(o, scale)
+        function plotObstacle(o, scale, offset)
             if nargin == 1
                 scale = 1;
             end
-            X = scale*[o.x_min, o.x_min, o.x_max, o.x_max];
-            Y = scale*[o.y_min, o.y_max, o.y_max, o.y_min];
+            X = scale*([o.x_min, o.x_min, o.x_max, o.x_max] - offset(1));
+            Y = scale*([o.y_min, o.y_max, o.y_max, o.y_min] - offset(2));
             plot(X, Y);
             fill(X, Y, 'g');
             

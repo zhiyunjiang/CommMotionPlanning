@@ -17,6 +17,8 @@ classdef TreeNode < handle
         children = [];
         isRoot = 0;
         distToHere = Inf;
+        
+        PL;
     end
 
     
@@ -32,6 +34,14 @@ classdef TreeNode < handle
         
         function pos = getPos(this)
            pos = this.wrkspcpos; 
+        end
+        
+        function dist = distTo(this, other, norm_num)
+           if nargin == 2
+               %make the default norm the 2-norm (euclidean distance)
+              norm_num = 2; 
+           end
+           dist = norm(this.wrkspcpos - other.wrkspcpos, norm_num); 
         end
 
          function setParent(this, parent, dist, path_from_parent)
@@ -65,6 +75,20 @@ classdef TreeNode < handle
                    break;
                end
            end
+        end
+        
+        function PL_vals = getPLValsToRoot(this)
+            current = this;
+            PL_vals = [];
+            while ~current.isRoot
+               %only take the path up to but not including the parent
+               %parent is first, so don't add it (will be added next
+               %iteration
+               PL_vals = [ current.PL; PL_vals];
+               current = current.parent;
+            end
+            %tack on the root
+            PL_vals = [current.PL; PL_vals];
         end
      
         function path = pathToRoot(this, do_plot, scale)

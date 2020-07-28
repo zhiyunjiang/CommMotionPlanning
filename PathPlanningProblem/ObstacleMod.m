@@ -22,9 +22,9 @@ classdef ObstacleMod < handle
             end
         end
         
-        function plotObstacles(o, scale)
+        function plotObstacles(o, scale, offset)
            for i=1:length(o.obstacles)              
-              o.obstacles(i).plotObstacle(scale);
+              o.obstacles(i).plotObstacle(scale, offset);
               hold on
            end
         end

@@ -44,10 +44,10 @@ classdef CircObs < IObstacle
             end
         end
         
-        function plotObstacle(o, scale)
+        function plotObstacle(o, scale, offset)
             th = 0:pi/50:2*pi;
             rad = scale*o.r;
-            cent = scale*o.c;
+            cent = scale*(o.c - offset);
             X = rad*cos(th) + cent(1);
             Y = rad*sin(th) + cent(2);
             plot(X, Y)
