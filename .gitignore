@@ -1,3 +1,5 @@
 *.fig
 *.png
 figs/**
+arjun_python/**
+*.asv
