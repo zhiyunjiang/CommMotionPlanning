@@ -242,22 +242,35 @@ classdef RDTree < handle
          
     end
     
-    methods(Access = private, Static = true)
+    methods(Access = public, Static = true)
         
-     
          function path = getApproxGridSLPath(start, dest)
+            %getAppoxGridSLPath - Tries to get a path on the grid that is
+            %as close to a straightline as possible.
+            %INPUT
+            % start - [x,y] point from which the path begins
+            % dest - [x,y] point where the path ends
+            %OUTPUT
+            % path - nx2 matrix, with path(i,:) = [x,y] giving the points
+            % along the path
+            %
+            %In the grid, the path may go in any one of 8 directions: up, up-right,
+            %right, down-right, down, down-left, left, up-left. Or in terms
+            %of clock positions: 12, 1:30, 3, 4:30, 6, 7:30, 9, 10:30. 
+            %
+            %Divides path into steps. For each step, compare the actual
+            %slope achieved so far to the slope we want, then pick slope
+            %from among the possible slopes [based on grid] that will get
+            % there.
             dist = start - dest;
             dist_abs = abs(dist);
             mabs = dist_abs(2)/dist_abs(1);
             min_path_length = sum(dist_abs) + 1;
-            if(min_path_length < 2)
-               1; 
-            end
             
             path = zeros([min_path_length, 2]);
             path(1,:) = start;
-            path(end,:) = dest;
-            for i = 2:min_path_length - 1
+            last_path_index = min_path_length;
+            for i = 2:min_path_length
                 %just straight up /down
                 if mabs == Inf
                    path(i,:) = path(i-1,:) + [0,-1*sign(dist(2))];
@@ -266,18 +279,35 @@ classdef RDTree < handle
                     path(i,:) = path(i-1,:) + [-1*sign(dist(1)), 0];
                 else
                     %get slope from v_nearest to previous point.
-                    prev_delta = abs(path(1,:) - path(i-1, :));
-                    prev_slope = prev_delta(2)/prev_delta(1);
-                    if prev_slope <= mabs
-                       %need more rise
-                       path(i,:) = path(i-1,:) + [0, -1*sign(dist(2))];
-                    else
-                        %otherwise, needs to run more
-                        path(i,:) = path(i-1,:) + [-1*sign(dist(1)), 0];
-                    end
+                    prev_tot_delta = abs(path(1,:) - path(i-1, :));
+                    delta = RDTree.getGridSLPathDelta(mabs, dist, prev_tot_delta(1), prev_tot_delta(2));
+                    path(i,:) = path(i-1,:) + delta;
+                end
+                
+                if all(path(i,:) == dest)
+                    last_path_index = i;
+                    break;
                 end
             end
-        end
+            
+            path = path(1:last_path_index,:);
+         end
+    end
+    
+    methods (Access = private, Static = true)
+         function delta = getGridSLPathDelta(true_slope_abs, dist, cur_dx_abs, cur_dy_abs)
+             next_slopes_abs = (cur_dy_abs + [1, 0, 1])./(cur_dx_abs + [0, 1, 1]);
+             [~,dir] =min(abs(true_slope_abs - next_slopes_abs)); 
+             delta = [0,0];
+             if dir == 1 || dir == 3
+               %need more rise
+               delta =  [0, -1*sign(dist(2))];
+             end
+             if dir >= 2
+                %needs to run more
+               delta = delta + [-1*sign(dist(1)), 0];
+             end
+         end
     end
 end
 

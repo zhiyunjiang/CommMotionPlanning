@@ -258,6 +258,44 @@ classdef ChannelAnalyzer < handle
             
         end
         
+        function J_0 = J0(this, root)
+            %Approximate integral from -Inf to Inf  of P(gamma_PL + gamma_SH + gamma_MP < gamma_TH)
+            %using recursive J formulation as in Arjun's paper
+            gamma_pl_root = this.commChannel.getGammaPLdBAtPoint(root);
+            J_0 = normpdf(this.gammaSHVec, 0, this.channelParams.sigmaSH)...
+                .*this.mpCDF(this.gammaTH - gamma_pl_root - this.gammaSHVec);
+        end
+        
+        function J_next = ItterativeJNextFromPoint(this, J_prev, point, step_size)
+            gamma_pl = this.commChannel.getGammaPLdBAtPoint(point);
+           J_next = this.ItterativeJNext(J_prev, gamma_pl, step_size); 
+        end
+        
+        function J_next = ItterativeJNext(this, J_prev, gamma_pl, step_size)
+            cp = this.channelParams;
+            rho = exp(-step_size/this.scaledDecorrSH);
+            sig = sqrt(cp.sigmaSH^2 *(1 - rho^2));
+            phi = normpdf(this.gammaSHVec, 0, sig);
+            G = this.g;
+            
+            J_prev_contracted = zeros([this.g, 1]);
+            gfloor = floor(G/2);
+            for i = 1:G
+               J_prev_index = round((1 - rho^(-1) )*gfloor + (i/rho) ) + 1;
+               if J_prev_index >= 1 && J_prev_index <= G 
+                  J_prev_contracted(i) = J_prev(J_prev_index);
+               end
+            end
+            
+            J_next = (1/rho)*this.delU*conv(phi, J_prev_contracted, 'same')...
+                .*this.mpCDF(this.gammaTH - gamma_pl - this.gammaSHVec);
+        end
+        
+        function p_no_conn_to_here = IntegrateJ(this, J)
+            %estimate integral using Riemann sum
+            p_no_conn_to_here = sum(J)*this.delU;
+        end
+        
         function plot_priors(this)
            cc = this.commChannel;
            gamma_gap = this.gammaTH - cc.getGammaPLdB(); 
@@ -349,13 +387,9 @@ classdef ChannelAnalyzer < handle
             end
             p_no_conn_to_here = zeros([path_dim, 1]);
             d = zeros([path_dim, 1]);
-            %Approximate integral from -Inf to Inf  of P(gamma_PL + gamma_SH + gamma_MP < gamma_TH)
-            %using recursive J formulation as in Arjun's paper
-            gamma_pl_root = this.commChannel.getGammaPLdBAtPoint(path(1,:));
-            J_0 = normpdf(this.gammaSHVec, 0, this.channelParams.sigmaSH)...
-                .*this.mpCDF(this.gammaTH - gamma_pl_root - this.gammaSHVec);
+            J_0 = this.J0(path(1,:));
             %estimate integral using Riemann sum
-            p_no_conn_to_here(1) = sum(J_0)*this.delU;
+            p_no_conn_to_here(1) = this.IntegrateJ(J_0);
             d(1) = 0;
             
             J_prev = J_0;
@@ -363,35 +397,13 @@ classdef ChannelAnalyzer < handle
                 gamma_pl = this.commChannel.getGammaPLdBAtPoint(path(i,:));
                 d(i) = norm(path(i-1,:) - path(i,:));
                 J_prev = this.ItterativeJNext(J_prev, gamma_pl, d(i));
-                %estimate integral using Riemann sum
-                p_no_conn_to_here(i) = sum(J_prev)*this.delU;
+                p_no_conn_to_here(i) = this.IntegrateJ(J_prev);
             end
             p_no_conn_to_here = p_no_conn_to_here/p_no_conn_to_here(1);
             
             g = [0; p_no_conn_to_here(1:end-1) - p_no_conn_to_here(2:end)];
         
         end
-        
-        function J_next = ItterativeJNext(this, J_prev, gamma_pl, step_size)
-            cp = this.channelParams;
-            rho = exp(-step_size/this.scaledDecorrSH);
-            sig = sqrt(cp.sigmaSH^2 *(1 - rho^2));
-            phi = normpdf(this.gammaSHVec, 0, sig);
-            G = this.g;
-            
-            J_prev_contracted = zeros([this.g, 1]);
-            gfloor = floor(G/2);
-            for i = 1:G
-               J_prev_index = round((1 - rho^(-1) )*gfloor + (i/rho) ) + 1;
-               if J_prev_index >= 1 && J_prev_index <= G 
-                  J_prev_contracted(i) = J_prev(J_prev_index);
-               end
-            end
-            
-            J_next = (1/rho)*this.delU*conv(phi, J_prev_contracted, 'same')...
-                .*this.mpCDF(this.gammaTH - gamma_pl - this.gammaSHVec);
-        end
-        
         
         
         %FPDPDFStraightlineNoMP - calculate the PMF for epsilon-upcrossing

@@ -18,7 +18,7 @@ classdef TreeNode < handle
         isRoot = 0;
         distToHere = Inf;
         
-        PL;
+        problemData;
     end
 
     
@@ -30,6 +30,8 @@ classdef TreeNode < handle
             else
                 this.wrkspcpos = [0, 0];
             end
+            
+            this.problemData = containers.Map;
         end
         
         function pos = getPos(this)
@@ -44,7 +46,7 @@ classdef TreeNode < handle
            dist = norm(this.wrkspcpos - other.wrkspcpos, norm_num); 
         end
 
-         function setParent(this, parent, dist, path_from_parent)
+        function setParent(this, parent, dist, path_from_parent)
             %need to update cost to other nodes down the line, too
             this.updateDist(parent.distToHere, dist);
             if ~isempty(this.parent)
@@ -61,8 +63,17 @@ classdef TreeNode < handle
                 %otherwise assume it's just the line between them
                 this.pathFromParent = [parent.getPos(); this.getPos()];
             end
-          end
-        
+         end
+          
+        function root = getRootNode(this)
+            node = this;
+            while ~node.isRoot
+               node = this.parent; 
+            end
+            
+            root = node;
+        end
+         
         function tf = eq(this, that)
            tf = (norm(this.wrkspcpos - that.wrkspcpos) == 0);
         end
@@ -77,20 +88,6 @@ classdef TreeNode < handle
            end
         end
         
-        function PL_vals = getPLValsToRoot(this)
-            current = this;
-            PL_vals = [];
-            while ~current.isRoot
-               %only take the path up to but not including the parent
-               %parent is first, so don't add it (will be added next
-               %iteration
-               PL_vals = [ current.PL; PL_vals];
-               current = current.parent;
-            end
-            %tack on the root
-            PL_vals = [current.PL; PL_vals];
-        end
-     
         function path = pathToRoot(this, do_plot, scale)
             if nargin == 2
                scale = 1; 

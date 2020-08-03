@@ -22,15 +22,37 @@ function exp_dist = ExpectedDistance(n1, n2, ca, method)
 %OUTPUT
 % double exp_dist - expected distance added to the path 
 
-    %Retrieve the path all the way back to root
-    path = n2.pathToRoot(0);
-    %find the probability of no connection thusfar
-    p_no_conn_2_here = ca.NoConnectionOnPath(path, method);
+    no_conn_key = 'p_no_conn_to_here';
+    j_key = 'J';
+    n2_data = n2.problemData;
+    if n2.isRoot && ~n2_data.isKey(no_conn_key)
+        %root coming through for the first time, need to intialize J
+        %functions
+        n2_data(j_key) = ca.J0(n2.getPos());
+        %n2_data is a handle object, so we can just modify here
+        n2_data(no_conn_key) = ca.IntegrateJ(n2_data(j_key));
+    end
     
+    if n2_data.isKey(no_conn_key)
+        p_no_conn_to_n2 = n2_data(no_conn_key);
+    else
+       error('p_no_conn_to_here has not been computed for this node'); 
+    end
+    
+    nroot = n2.getRootNode();
+
     %find the conditional probability
-    p_no_conn_cond = p_no_conn_2_here/ca.NoConnectionPrior(path(1,:));
+    p_no_conn_cond = p_no_conn_to_n2/nroot.problemData(no_conn_key);
    
     %use the probability to scale the distance
-    exp_dist = p_no_conn_cond*n1.distTo(n2);
+    dist = n1.distTo(n2);
+    exp_dist = p_no_conn_cond*dist;
+    
+    %also setup J, prob of no connectivity for new node, n1
+    n1_data = n1.problemData;
+    j_prev = n2_data(j_key);
+    n1_data(j_key) = ca.ItterativeJNextFromPoint(j_prev, n1.getPos(), dist);
+    n1_data(no_conn_key) = ca.IntegrateJ(n1_data(j_key));
+    
 end
 
