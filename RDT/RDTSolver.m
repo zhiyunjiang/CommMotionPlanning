@@ -29,26 +29,27 @@ classdef RDTSolver < handle
         function solve(this, pppi)
             tic;
             this.initializeTree(pppi);
-            this.sampler.setParams(pppi);
-            
-            iteration_count = 0;
-            elapsed_time = toc;
-            series_delta = 0.2;
-            time_for_next_recording = series_delta;
-            
-            while ~this.stopCriteria.stop(elapsed_time , iteration_count, this.getBSF())
-                x_rand = this.sampler.sample(iteration_count, pppi, this.minCostSoFar());
-                
-                this.rdTree.executeIteration(x_rand, pppi);
-                
-                iteration_count = iteration_count + 1;
+            if ~this.startInDest(pppi)
+                this.sampler.setParams(pppi);
+
+                iteration_count = 0;
                 elapsed_time = toc;
-                if elapsed_time > time_for_next_recording
-                    time_for_next_recording = time_for_next_recording + series_delta;
-                   this.rdTree.recordBSFCost(elapsed_time); 
+                series_delta = 0.2;
+                time_for_next_recording = series_delta;
+
+                while ~this.stopCriteria.stop(elapsed_time , iteration_count, this.getBSF())
+                    x_rand = this.sampler.sample(iteration_count, pppi, this.minCostSoFar());
+
+                    this.rdTree.executeIteration(x_rand, pppi);
+
+                    iteration_count = iteration_count + 1;
+                    elapsed_time = toc;
+                    if elapsed_time > time_for_next_recording
+                        time_for_next_recording = time_for_next_recording + series_delta;
+                       this.rdTree.recordBSFCost(elapsed_time); 
+                    end
                 end
             end
-            
         end
         
         function tail = getBSF(this)
@@ -67,16 +68,25 @@ classdef RDTSolver < handle
     methods (Access = private)
 
         function initializeTree(this, pppi)
-           root_pos = pppi.getSourceGrid();
+           
            %see Karaman & Frazzoli, 2011, page 29. Here, d=2 
+           root_pos = pppi.getSourceGrid();
            gridRegion = pppi.getGridRegion();
            length = (gridRegion(1) - gridRegion(2));
            width = (gridRegion(3) - gridRegion(4));
            grid_area = length*width;%total area will be >= area of X_free
            gamma =  sqrt(3*(grid_area/2*pi));
-            
+
            is_continuous = (pppi.getStepSize() == 0);
-            this.rdTree.initialize(gamma, root_pos, is_continuous);
+           this.rdTree.initialize(gamma, root_pos, is_continuous);
+        end
+        
+        function tf = startInDest(this, pppi)
+            root_pos = pppi.getSourceGrid();
+            tf = pppi.pointInGoalRegion(root_pos);
+            if tf
+                this.rdTree.BSF = this.rdTree.treeNodes(1);
+            end
         end
     end
 end

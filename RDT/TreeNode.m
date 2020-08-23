@@ -68,7 +68,7 @@ classdef TreeNode < handle
         function root = getRootNode(this)
             node = this;
             while ~node.isRoot
-               node = this.parent; 
+               node = node.parent; 
             end
             
             root = node;
@@ -146,6 +146,8 @@ classdef TreeNode < handle
         end
         %if the distance to me gets updated, need to update distance to my
         %children
+        %TODO - update to take into account the problem instance's distance
+        %metric. Should only need to be calculated for rewire
         function propogateDiff(this, diff)
             this.distToHere = this.distToHere - diff;
             for i = 1:length(this.children)

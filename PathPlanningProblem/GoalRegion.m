@@ -10,7 +10,6 @@ classdef GoalRegion < handle
         goalGridPoints;
         
         goalGridMap;
-        
     end
     
     methods
@@ -86,7 +85,8 @@ classdef GoalRegion < handle
             %in the map
             x_keys = this.goalGridMap.keys;
             x_count = length(x_keys);
-            offests = [[0, 1];[0, -1];[1, 0];[-1, 0]];
+            offsets = [[0, 1];[0, -1];[1, 0];[-1, 0];...
+                        [1,1];[-1,1];[1,-1];[-1,-1]];
             
             for i=1:x_count
                 x = cell2mat(x_keys(i));
@@ -99,8 +99,8 @@ classdef GoalRegion < handle
                     
                     dest = [x ,y]; 
                     keep = 0;
-                    for k = 1:4
-                        neighbor = dest + offests(k,:);
+                    for k = 1:length(offsets)
+                        neighbor = dest + offsets(k,:);
                         if  (~this.gridPointInGoalRegion(neighbor) ...
                                 && this.inProblemGridRegion(neighbor))
                             keep = 1;

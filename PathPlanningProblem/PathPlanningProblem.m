@@ -1,4 +1,4 @@
-classdef PathPlanningProblem < handle
+classdef PathPlanningProblem < matlab.mixin.Copyable
     %PathPlanningProblem - Represents an instance of a path planning
     %problem to be solved. Handles discretization over continuous space as
     %well as obstacle checking and performance metric, as all these should
@@ -43,6 +43,8 @@ classdef PathPlanningProblem < handle
     end
     
     methods
+        
+        
         function this = PathPlanningProblem(region, resolution, source, destinations, obstacle_mod, cost_func, destination_resolution)
             this.resolution = resolution;
             
@@ -77,10 +79,20 @@ classdef PathPlanningProblem < handle
             this.costFunction = cost_func;
         end
         
-        function cost = pathCost(this, n1, n2, path)
-            cost = this.costFunction(n1, n2, path);
+        function copy = copyWithNewSource(this, grd_src)
+           %shallow copy using inherited copy() method from matlab.mixin.Copyable
+           copy = this.copy(); 
+           copy.source = this.toRawCoordinate(grd_src);
         end
         
+        function cost = pathCost(this, n1, n2, path, mode)
+            %mode = 1 just calculate the distance
+            %mode = 2 make any updates to node data (if necessary)
+            if nargin == 4
+                mode = 1;
+            end
+            cost = this.costFunction(n1, n2, path, mode);
+        end 
         
         function tf = nodeInDestGrid(this, n1)
             pos = n1.getPos();
@@ -101,26 +113,26 @@ classdef PathPlanningProblem < handle
         end
         
         function viable_subpath = collisionFree(this, path)
-            was_obstructed = 0;
+            terminate_early = 0;
             [lngth, ~] = size(path);
             
             for i = 1:lngth - 1
+                %check if the point is in the goal region
+                if this.pointInGoalRegion(path(i,:))
+                    terminate_early = 1;
+                    break
+                end
                 %path will be in terms of grid coordinates only. To
                 %compare to objects, convert back to true scale
-                scale = this.getStepSize();
-                if scale == 0
-                    %this is a continuous space problem, just use raw
-                    %points
-                    scale = 1;
-                end
-                p1 = scale*path(i,:) + this.offset;
-                p2 = scale*path(i+1,:) + this.offset;
+
+                p1 = this.toRawCoordinate(path(i,:));
+                p2 = this.toRawCoordinate(path(i+1,:));
                 if ~ this.obstacleMod.collisionFree(p1, p2)
-                    was_obstructed = 1;
+                    terminate_early = 1;
                    break; 
                 end
             end
-            if was_obstructed
+            if terminate_early
                 viable_subpath = path(1:i,:);
             else
                 viable_subpath = path;
@@ -193,18 +205,26 @@ classdef PathPlanningProblem < handle
            end
         end
        
-       %toGridCoordinate - takes raw point (x,y) and converts to point
-       %on grid by (1) shifting by offset, (2) scaling by resolution,
-       %and (3) rounding to nearest point
-       %
-       %Input
-       % this - this PathPlanningProblem object
-       % val - raw corrdinate (x,y)
        function coord =  toGridCoordinate(this,val)
+           %toGridCoordinate - takes raw point (x,y) and converts to point
+           %on grid by (1) shifting by offset, (2) scaling by resolution,
+           %and (3) rounding to nearest point
+           %
+           %Input
+           % this - this PathPlanningProblem object
+           % val - raw corrdinate (x,y)
            if this.resolution == Inf
                coord = val - this.offset;
            else
                coord = round((val - this.offset)/this.getStepSize());
+           end
+       end
+       
+       function raw = toRawCoordinate(this, grd_val)
+           if this.resolution == Inf
+               raw = grd_val + this.offset;
+           else
+               raw = (grd_val*this.getStepSize()) + this.offset;
            end
        end
        

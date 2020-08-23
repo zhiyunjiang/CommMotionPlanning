@@ -1,4 +1,4 @@
-function exp_dist = ExpectedDistance(n1, n2, ca, method)
+function exp_dist = ExpectedDistance(n1, n2, path, ca, mode)
 %ExpectedDistance - TreeNode X TreeNode -> positive real
 % Calculate the expected distance adding n2 to a tree path will add to the
 % path. Metric function to be used for RDT
@@ -6,21 +6,17 @@ function exp_dist = ExpectedDistance(n1, n2, ca, method)
 %INPUT
 % TreeNode n1 - The node to be added to the graph
 % TreeNode n2 - The node already in the graph. 
+% path - points from n1 to n2, inclusive
 % ChannelAnalyzer ca - channel analyzer with relevant channel data. Used to
 % calculate probabilities.
-% method - Flag indicacting which method to use to calculate the
-% probability of no connection along the path up to that point.
-%               1 - Use Botev's monte carlo based method. Can handle > 25
-%               dimensions (path points), and may be more accurate for
-%               higher dimensions, but will be slower
-%               2 - Use matlab's built in multivarirate CDF function, which
-%               will can only handle up to 25 dimensions. Path will be
-%               truncated to the 25 most recent points.
-%               3 - Assume the path is approximately Markovian, use Arjun's
-%               characterization
-
+% mode - If mode == 1, just compute the distance. If mode == 2, also update
+% the 'J' and 'p_no_conn_to_here' attributes of n1
 %OUTPUT
 % double exp_dist - expected distance added to the path 
+
+    if nargin == 3
+        mode = 1;
+    end
 
     no_conn_key = 'p_no_conn_to_here';
     j_key = 'J';
@@ -48,11 +44,16 @@ function exp_dist = ExpectedDistance(n1, n2, ca, method)
     dist = n1.distTo(n2);
     exp_dist = p_no_conn_cond*dist;
     
-    %also setup J, prob of no connectivity for new node, n1
-    n1_data = n1.problemData;
-    j_prev = n2_data(j_key);
-    n1_data(j_key) = ca.ItterativeJNextFromPoint(j_prev, n1.getPos(), dist);
-    n1_data(no_conn_key) = ca.IntegrateJ(n1_data(j_key));
+    if mode == 2
+        %also setup J, prob of no connectivity for new node, n1
+        n1_data = n1.problemData;
+        j_prev = n2_data(j_key);
+        for i = 2:length(path)
+           j_prev = ca.ItterativeJNextFromPoint(j_prev, path(i,:), dist);  
+        end
+        n1_data(j_key) = j_prev;
+        n1_data(no_conn_key) = ca.IntegrateJ(n1_data(j_key));
+    end
     
 end
 

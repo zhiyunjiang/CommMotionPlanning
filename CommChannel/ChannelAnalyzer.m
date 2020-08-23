@@ -6,6 +6,9 @@ classdef ChannelAnalyzer < handle
         gammaTH;
         noMP;
         ricDist;
+        riceCDFLUT;%Rician dist look up table
+        LUTRes = 1000; % the number of entries to build out in the LUT
+        LUTMax;
         scaledDecorrSH;
         
         %from arjun_python/fpd_with_mp.py
@@ -28,10 +31,11 @@ classdef ChannelAnalyzer < handle
            this.noMP = no_mp;
            K_ric = this.channelParams.kRic;
            this.ricDist = makedist('Rician', 's', sqrt(K_ric/(K_ric + 1)), 'sigma',1/sqrt(2*(1+K_ric)));
-           
+           this.computeRiceCDFLUT();
            %Values that will needed to perform numerical integration later
            %number of samples to use
-           this.g = 2^16;
+           %this.g = 2^16;
+           this.g = 2^14;
            %samples will run from 8 std dev below to 8 above mean (0)
            this.u = 8*this.channelParams.sigmaSH;
            %distance between each sample
@@ -88,7 +92,8 @@ classdef ChannelAnalyzer < handle
                %now looking at the probabiltiy that gamma_SH + gamma_MP <
                %gamma_TH - gamma_PL. Will compute with fast fourier
                %transform, similar to Arjun's paper
-               
+               J0 = this.J0(point);
+               prior = this.IntegrateJ(J0);
            end
         end
         
@@ -133,6 +138,9 @@ classdef ChannelAnalyzer < handle
            elseif method == 3
                [g_pdf, d] = this.FPDPDFStraightlineNoMP(path);
                exp_dist = (g_pdf.*d)'*cumsum(d);
+           elseif method ==4
+               [p_no_conn, d] = this.NoConnAlongSL(path);
+               exp_dist = p_no_conn'*d;
            end
         end
         
@@ -173,49 +181,6 @@ classdef ChannelAnalyzer < handle
            end
         end
         
-        function [approx_PMF, distances] = ApproxFPDPMF2(this, step, num_steps, dsrc, thetasrc, thetaos, root)
-            [g_pdf, distances] = this.FPDPDFStraightlineNoMP2(step, num_steps, dsrc, thetasrc, thetaos, root);
-             approx_PMF = g_pdf.*distances;
-        end
-        
-        function [g_aug, dists_aug] =  IterativeFPDPDFSLNoMP2(this, d, step, dsrc, thetasrc, thetaos, root, g, dists, epsilon)
-            n = length(dists);
-            
-            %the root of the path
-            if n == 0
-                dists_aug = 0;
-                g_new = 0;
-            else
-                d_new = step;
-                dists_aug = [dists; d_new];
-                
-                d_l = d - 0.001*(step);
-                w_simpson = SimpsonWeights(n, dists_aug(2:end));
-                w_gnew = w_simpson(end);
-                
-                denom = (1 - 2*w_gnew*this.psiVolterra2(d, d_l, this.gammaTH, thetasrc, thetaos, dsrc, root));
-
-                if n == 1 %first step along the path  no enough points to do numerical approximation of integral
-                    g_new = (-2*this.psiVolterraUp2(d, thetasrc, thetaos, dsrc, root, epsilon))/denom;
-                else
-                    psi_current = zeros([n, 1]);
-                    for i = 1:n
-                        psi_current(i) = this.psiVolterra2(d, step*(i-1), this.gammaTH, thetasrc, thetaos, dsrc, root);
-                    end
-                    w_integral = w_simpson(1:end-1);
-                    integrand_vals = psi_current.*g;
-                    
-                    g_new = (-2*this.psiVolterraUp2(d, thetasrc, thetaos, dsrc, root, epsilon) + 2*w_integral*integrand_vals)...
-                        /denom;
-                end
-            end
-            
-            if g_new < 0
-                g_new = 0;
-            end
-            g_aug = [g; g_new];
-        end
-       
         function [g_aug, d_aug] = IterativeFPDPDFSLNoMP(this, g, d, root, prevs, current, epsilon)
             n = length(d);
             
@@ -379,8 +344,7 @@ classdef ChannelAnalyzer < handle
             end
         end
         
-        function [g, d] = FPDPMFStraightline(this, path)
-            
+        function [p_no_conn_to_here, d] = NoConnAlongSL(this, path)
             path_dim = length(path);
             if min(size(path)) == 1
                 path_dim = 1;
@@ -400,6 +364,11 @@ classdef ChannelAnalyzer < handle
                 p_no_conn_to_here(i) = this.IntegrateJ(J_prev);
             end
             p_no_conn_to_here = p_no_conn_to_here/p_no_conn_to_here(1);
+        end
+        
+        function [g, d] = FPDPMFStraightline(this, path)
+            
+           [p_no_conn_to_here, d] = this.NoConnAlongSL(path);
             
             g = [0; p_no_conn_to_here(1:end-1) - p_no_conn_to_here(2:end)];
         
@@ -436,19 +405,6 @@ classdef ChannelAnalyzer < handle
             for i = 2:path_dim
                 [g_pdf, d] = this.IterativeFPDPDFSLNoMP(g_pdf, d, root,...
                     path(1:i-1,:), path(i,:), epsilon);
-            end
-        end
-        
-        function [gs, dists]  = FPDPDFStraightlineNoMP2(this, step, num_steps, dsrc, thetasrc, thetaos, root, epsilon)
-            if nargin == 7
-               epsilon = 0.0001; 
-            end
-            
-            
-            gs = []; dists = [];
-            for i = 1:num_steps + 1
-                d = step*(i-1);
-                [gs, dists] =  this.IterativeFPDPDFSLNoMP2(d, step, dsrc, thetasrc, thetaos, root, gs, dists, epsilon);
             end
         end
         
@@ -543,65 +499,7 @@ classdef ChannelAnalyzer < handle
                 (h1_d*h2_l-h2_d*h1_l)) - ((y - m_l)/2) * ((h2p_d*h1_d-h2_d*h1p_d) /...
                 (h1_d*h2_l-h2_d*h1_l))) * f(S);
         end
-        
-        function p_v = psiVolterraUp2(this, d, thetasrc, thetaos, dsrc, root, epsilon)
-           cc = this.commChannel;
-          
-           h1_r = this.h1Cov(0);
-           h2_r = this.h2Cov(0);
-           h1_d = this.h1Cov(d);
-           h2_d = this.h2Cov(d);
-           h1p_d = this.h1CovPrime(d);
-           h2p_d = this.h2CovPrime(d);
-           S = this.gammaTH;
-           
-           m_r = cc.getGammaPLdBAtPoint(root);
-           current_point = root - d*[cos(thetasrc + thetaos), sin(thetasrc + thetaos)];
-           m_d = cc.getGammaPLdBAtPoint(current_point);
-            
-           sigma_sh = this.channelParams.sigmaSH;
-           pwr_sh = sigma_sh^2;
-           m_prime = this.plPrime2( d, thetasrc, dsrc);
-           m_cond = m_d + exp(-d/this.scaledDecorrSH)*(S - epsilon - m_r);
-           var_cond = pwr_sh*(1 - exp(-2*d/this.scaledDecorrSH));
-           
-           
-           erf_arg = (S-epsilon - m_r)/sqrt(2*h1_r*h2_r);
-           erf_arg2 = sqrt(h1_d/(2*h1_r*(h1_d*h2_r - h1_r*h2_d)))...
-               *(S - epsilon - m_r - (S-m_d)*(h1_r/h1_d));
-           
-           p_v = (1/(1+erf(erf_arg))) * ( (h1_r/h1_d)*(h1_d*h2p_d - h1p_d*h2_d)...
-               * normpdf(S-epsilon, m_r, sigma_sh) * normpdf(S, m_cond, sqrt(var_cond)) ...
-               + 0.5*normpdf(S, m_d, sigma_sh)*(1+erf(erf_arg2))*(-m_prime - (h1p_d/h1_d)*(S - m_d)));
-        end
-        
-        function p_v =  psiVolterra2(this, d, l, y, thetasrc, thetaos, dsrc, root)
-            cc = this.commChannel;
-            
-            current_point = root + d*[-cos(thetasrc - thetaos), sin(thetasrc - thetaos)];
-            m_d = cc.getGammaPLdBAtPoint(current_point);
-            prev_point = root + l*[-cos(thetasrc - thetaos), sin(thetasrc - thetaos)];
-            m_l = cc.getGammaPLdBAtPoint(prev_point);
-            
-            m_prime = this.plPrime2( d, thetasrc, dsrc);
-            S = this.gammaTH; S_prime = 0;
-            
-            h1_d = this.h1Cov(d);
-            h1p_d = this.h1CovPrime(d);
-            h2_d = this.h2Cov(d);
-            h2p_d = this.h2CovPrime(d);
-            h1_l = this.h1Cov(l);
-            h2_l = this.h2Cov(l);
-            m_cond = m_d + (h2_d/h2_l)*(y - m_l);
-            var_cond = h2_d*(h1_d - (h2_d/h2_l))*h1_l;
-            
-            f = @(s) normpdf(s, m_cond, sqrt(var_cond));
-            
-            p_v = ((S_prime - m_prime)/2 - ((S-m_d)/2)*((h1p_d*h2_l-h2p_d*h1_l)/...
-                (h1_d*h2_l-h2_d*h1_l)) - ((y - m_l)/2) * ((h2p_d*h1_d-h2_d*h1p_d) /...
-                (h1_d*h2_l-h2_d*h1_l))) * f(S);
-        end
-        
+
         function m_prime = plPrime(this, current_point, prev_point)
             cp = this.channelParams;
             qb = (cp.qBase - ...
@@ -611,12 +509,6 @@ classdef ChannelAnalyzer < handle
             v1 = qb - prev_point; v2 = qb - current_point - prev_point;
             cos_theta = -max(min(dot(v1,v2)/(norm(v1)*norm(v2)),1),-1);
             m_prime = -10*cp.nPL/(d2b*log(10))*cos_theta;
-        end
-        
-        function m_prime = plPrime2(this, d, thetasrc, dsrc)
-            cp = this.channelParams;
-           m_prime = -10*cp.nPL*log10(exp(1))*(d - dsrc*cos(thetasrc))...
-               /(dsrc^2 + d^2 - 2*dsrc*d*cos(thetasrc));
         end
         
         function h1_cov = h1Cov(this, d)
@@ -644,8 +536,22 @@ classdef ChannelAnalyzer < handle
                %actually need to implement Rician CDF here
                %convert from dB to linear for rician
                x_lin = 10.^(x/20);
-               cp = this.ricDist.cdf(x_lin);
+               %cp = this.ricDist.cdf(x_lin);
+               
+               %find closest entry in LUT
+               x_lut_index = max(min(round(x_lin/(this.LUTMax/this.LUTRes)), this.LUTRes), 0) + 1;
+               cp = this.riceCDFLUT(x_lut_index);
            end
+        end
+        
+        function computeRiceCDFLUT(this)
+            %hard code for now
+            this.LUTMax = 7*this.ricDist.std();
+            
+            %now build out the table
+            x = 0:this.LUTMax/this.LUTRes:this.LUTMax;
+            
+            this.riceCDFLUT = this.ricDist.cdf(x);
         end
         
     end

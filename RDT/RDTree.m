@@ -39,10 +39,6 @@ classdef RDTree < handle
         function this = RDTree(do_rewire, steer_rad)
            this.doRewire = do_rewire;
            this.steerRad = steer_rad;
-           
-           %create a placeholder BSF with infinite cost
-            this.BSF = TreeNode([-Inf,-Inf]);
-            this.BSF.distToHere = Inf;
             
         end
         
@@ -58,7 +54,11 @@ classdef RDTree < handle
             root = TreeNode(root_pos);
             root.isRoot = 1;
             root.distToHere = 0;
-            this.treeNodes = [root];
+            this.treeNodes = root;
+            
+            %create a placeholder BSF with infinite cost
+            this.BSF = TreeNode([-Inf,-Inf]);
+            this.BSF.distToHere = Inf;
             
             if nargin == 4
                 this.isContinuous = is_continuous;
@@ -113,7 +113,8 @@ classdef RDTree < handle
          %addNode
          function n_new = addNode(this, nearest, path, do_rewire, pppi)
             new_node = TreeNode(path(end,:));
-            dist = pppi.pathCost(new_node, nearest, path);
+            %mode = 2 - update node data (if distance metric requires it)
+            dist = pppi.pathCost(new_node, nearest, path, 2);
             new_node.setParent(nearest, dist, path); 
             this.treeNodes = [this.treeNodes, new_node];
             
@@ -146,15 +147,11 @@ classdef RDTree < handle
                
                if dist <= radius
                    path = this.getSLPath(x_current, x_this);
-                   cost = this.theta*pppi.pathCost(current, this_vertex, path);
+                   %TODO - rework rewiring so that recalculation of
+                   %distances is coherent
+                   cost = this.theta*pppi.pathCost(current, this_vertex, path, 1);
 
                     if (this_vertex.distToHere > (current.distToHere + cost)) && (this_vertex ~= current)
-                        if cost == 0
-                              %somehow we have a duplicate node, which
-                              %shouldn't happen
-                              1;
-                        end
-                        
                         %check to make sure there's nothing obstructing
                         viable_path = pppi.collisionFree(path);
                         
@@ -171,9 +168,8 @@ classdef RDTree < handle
                end
             end
         end
-         
-         
-         function path = steer(this, x_rand, v_nearest)
+          
+        function path = steer(this, x_rand, v_nearest)
 
             start = v_nearest.wrkspcpos;
             diff = x_rand - start;
@@ -181,9 +177,9 @@ classdef RDTree < handle
             if norm(diff) > this.steerRad
             
                 %find the direction
-                theta = atan2(diff(2), diff(1));
+                phi = atan2(diff(2), diff(1));
 
-                new_diff = [this.steerRad*cos(theta), this.steerRad*sin(theta)];
+                new_diff = [this.steerRad*cos(phi), this.steerRad*sin(phi)];
                 if ~this.isContinuous
                     new_diff = this.roundSteerPoint(new_diff);
                 end

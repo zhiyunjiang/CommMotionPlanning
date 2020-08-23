@@ -22,9 +22,13 @@ classdef CircObs < IObstacle
             a_to_c = obj.c - a;
             a_to_b = b - a;
             %find angle between ac and ab
-            theta = acos(a_to_c*a_to_b'/(norm(a_to_c)*norm(a_to_b)));
+            
+            theta = real(acos(max(min(dot(a_to_c,a_to_b)/(norm(a_to_c)*norm(a_to_b)),1),-1)));
             
             %find mindist from center to line on which line segment lies
+            if ~isreal(a_to_c) || ~isreal(theta)
+                bad = 1;
+            end
             min_dist = norm(a_to_c)*sin(mod(theta, pi));
             
             %if the min distance from the circle center to the line is
@@ -51,7 +55,7 @@ classdef CircObs < IObstacle
             X = rad*cos(th) + cent(1);
             Y = rad*sin(th) + cent(2);
             plot(X, Y)
-            fill(X, Y, 'g');
+            fill(X, Y, 'k');
         end
         
     end
