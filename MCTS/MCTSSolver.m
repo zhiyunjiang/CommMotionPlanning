@@ -31,7 +31,6 @@ classdef MCTSSolver
             iteration_count = 0;
             rrt_solver = MCTSSolver.getRRTSimulator();
             while iteration_count < max_depth && ~(pppi.nodeInDestGrid(node_2_expand))
-                tic;
                 iteration_count = iteration_count + 1;
                 %already have node_2_expand selected
                 admissible_actions = MCTSSolver.getAdmissibleActions(node_2_expand, pppi);
@@ -51,7 +50,8 @@ classdef MCTSSolver
                    next_pos = MCTSSolver.nextPoint(node_2_expand, action);
                    pppi_sim = pppi.copyWithNewSource(next_pos);
                    
-                   costs(action) = costs(action) +  MCTSSolver.simulateFrom(pppi_sim, ca, rrt_solver);
+                   costs(action) = costs(action) +  ...
+                       MCTSSolver.simulateFrom(pppi_sim, ca, rrt_solver, node_2_expand.pathToHere());
                    
                    exp_cost = costs(action)/counts(action);
 
@@ -66,7 +66,7 @@ classdef MCTSSolver
                 %now get the next point
                 %TODO - handle case where bsf = 0;
                 node_2_expand = MCTSSolver.getNextNode(node_2_expand, bsf);
-                fprintf('Completed iteration %d. Duration %d\n', iteration_count, toc);
+                fprintf('Completed iteration %d\n', iteration_count);
             end
             
         end
@@ -131,10 +131,11 @@ classdef MCTSSolver
            end   
         end
         
-        function cost = simulateFrom(pppi_sim, ca, rrt_solver)
+        function cost = simulateFrom(pppi_sim, ca, rrt_solver, path_to)
             rrt_solver.solve(pppi_sim);
             bsf = rrt_solver.getBSF();
             path = bsf.pathToRoot(0);
+            path = [path_to(1:end-1,:); path];
             cost = ca.ExpectedFPD(path,4);
         end
         

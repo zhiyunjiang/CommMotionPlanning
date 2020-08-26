@@ -47,6 +47,15 @@ classdef MCTSNode < handle
                 tf = 1;
            end
         end
+        
+        function path = pathToHere(this)
+           node = this;
+           path = node.getPos();
+           while ~node.isRoot
+              node = node.parent;
+              path = [node.getPos(); path];
+           end
+        end
 
     end
 end

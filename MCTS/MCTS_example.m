@@ -107,7 +107,7 @@ obs_mod = ObstacleMod(simple);
 cost_fxn = @(n1, n2, path, mode) GridDist(n1, n2, path, mode);
 path_res = res;
 problem_instance = PathPlanningProblem(region, path_res, source, connected, obs_mod, cost_fxn);
-
+%%
 figure (3)
 clf
 hold on
@@ -115,7 +115,9 @@ problem_instance.plotProb(1)
 %%
 %solve using MCTS
 sims_per_stage = 50;
+MCTS_start = cputime;
 [root, leaf] = MCTSSolver.solve(problem_instance, ca,  25*25*res^2, sims_per_stage);
+MCTS_time = cputime - MCTS_start
 %%
 node = leaf;
 path = node.getPos();
@@ -124,7 +126,7 @@ while ~node.isRoot
    path = [node.getPos();path];
 end
 hold on
-plot(path(:,1), path(:,2));
+plot(path(:,1), path(:,2),'o-');
 exp_dist = ca.ExpectedFPD(path,4)
 %%
 %solve using RRT
@@ -157,7 +159,7 @@ best_cost = Inf;
 best_path = [];
 cost_sum = 0;
 rrt_counts = 0;
-while 60*28 > run_time
+while MCTS_time > run_time
    rrt_counts = rrt_counts + 1;
    run_time = run_time + toc;
    rrt_solver.solve(problem_instance);
@@ -170,16 +172,12 @@ while 60*28 > run_time
        best_cost = cost;
    end
 end
-
+%%
 hold on
-plot(best_path(:,1), best_path(:,2));
+plot(best_path(:,1), best_path(:,2), '+-');
 best_cost 
 avg_cost = cost_sum/rrt_counts
-%%
-figure(3)
-hold on
-bsf = rrt_solver.getBSF();
-path = bsf.pathToRoot(1);
+
 %%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Some alternate methods for solving the path planning problem
