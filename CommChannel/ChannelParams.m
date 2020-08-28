@@ -12,11 +12,12 @@ classdef ChannelParams
         kRic;
         corrMP
         psdAtFC
+        sigmaMP;%when modeling shadowing as a zero-mean, log normal distribution
     end
     
     methods
         function this = ChannelParams(q_b, n_PL, K_PL, sigma_SH, sh_decorr,...
-                                        lambda, K_ric, mp_decorr, corr_mp, PSD_at_f_c)
+                                        lambda, K_ric, mp_decorr, corr_mp, PSD_at_f_c, sigma_mp)
            % Position of the base station (remote station or transmitter)
             this.qBase = q_b;
 
@@ -53,6 +54,11 @@ classdef ChannelParams
             this.decorrMP = mp_decorr;         
             
             this.corrMP = corr_mp;
+            
+            if nargin == 10
+                sigma_mp = 1;
+            end
+            this.sigmaMP = sigma_mp;
             
             this.psdAtFC = PSD_at_f_c;
         end

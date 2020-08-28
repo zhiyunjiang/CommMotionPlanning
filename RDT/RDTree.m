@@ -145,13 +145,13 @@ classdef RDTree < handle
                %use Eucliden distance for the neighborhood radius check
                dist = norm(x_this - x_current);
                
-               if dist <= radius
+               if (dist <= radius) && (this_vertex ~= current)
                    path = this.getSLPath(x_current, x_this);
                    %TODO - rework rewiring so that recalculation of
                    %distances is coherent
                    cost = this.theta*pppi.pathCost(current, this_vertex, path, 1);
 
-                    if (this_vertex.distToHere > (current.distToHere + cost)) && (this_vertex ~= current)
+                    if (this_vertex.distToHere > (current.distToHere + cost)) 
                         %check to make sure there's nothing obstructing
                         viable_path = pppi.collisionFree(path);
                         

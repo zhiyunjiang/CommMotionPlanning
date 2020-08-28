@@ -5,7 +5,7 @@ classdef CommChannel < handle
         channelParams;
         nSin;
         region;
-        res
+        res;
     end
     
     properties(Access = private)
@@ -131,7 +131,7 @@ classdef CommChannel < handle
         function gamma_PL_dB_at_point = getGammaPLdBAtPoint(this, point)
            cp = this.channelParams;
            raw_point = this.resPoint2Raw(point);
-           gamma_PL_dB_at_point = cp.kPL - 10*cp.nPL*log10(norm(cp.qBase - raw_point));
+           gamma_PL_dB_at_point = cp.kPL - 10*cp.nPL*log10(sqrt(sum((cp.qBase - raw_point).^2, 2)));
         end
         
         function q_BRes = getGridBase(this)
@@ -147,6 +147,7 @@ classdef CommChannel < handle
             gamma_TOT_dB_at_point = gamma_TOT_dB(point(2) + 1, point(1) + 1);
         end
         
+        %INCOMPLETE
         function gamma = simulatePath(this, path, no_mp, is_markov)
            path_dim = length(path);
            

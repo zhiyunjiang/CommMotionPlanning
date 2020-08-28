@@ -135,7 +135,7 @@ classdef MCTSSolver
             rrt_solver.solve(pppi_sim);
             bsf = rrt_solver.getBSF();
             path = bsf.pathToRoot(0);
-            path = [path_to(1:end-1,:); path];
+            path = [path_to; path];
             cost = ca.ExpectedFPD(path,4);
         end
         
