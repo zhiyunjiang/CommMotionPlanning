@@ -33,24 +33,22 @@ classdef AStarSolver < handle
             %get starting point, create a node, pop it onto the queue
             p_queue.Insert(this.root.totalDist, this.root);
             
-            found = 0;
-            
-            while ~p_queue.IsEmpty() && ~found
+            while ~p_queue.IsEmpty()
                %pop off the shortest from the tree/queue
                current = AStarSolver.Dequeue(p_queue);
+               
+               if pppi.pointInGoalRegion(current.getPos())
+                  break;
+               end
+               
                if current.visited
-               %Will be using consistent heuristic, therefore once we've
-               %visited once, we're set
+                   %Will be using consistent heuristic, therefore once we've
+                   %visited once, we're set
                    continue;
                end
                
                current.visited = 1;
-               
-               if pppi.pointInGoalRegion(current.getPos())
-                  found = 1;
-                  break;
-               end
-               
+                  
                %siblings, per the grid
                neighbor_pts = pppi.getGridNeighbors(current.getPos());
                sz = size(neighbor_pts);
@@ -59,23 +57,27 @@ classdef AStarSolver < handle
                    n_grid_pt = neighbor_pts(i,:);
                    [neighbor_node, is_new] = this.getNodeAtGridPt(existing_nodes, n_grid_pt);
                    
+                   path = [current.getPos(); neighbor_node.getPos()];
+                   cost = pppi.pathCost(neighbor_node, current, path, 1);
+                   
                    if is_new
                        %set the new parent, which will automatically update
                        %distance to there
-                       neighbor_node.setParent(current, 1);
+                       
+                       
+                       neighbor_node.setParent(current, cost);
                         
                         %now push onto the priority queue
                         p_queue.Insert(neighbor_node.totalDist, neighbor_node);
                         
-                   elseif ~neighbor_node.visited && neighbor_node.distToHere > current.distToHere + 1
+                   elseif ~neighbor_node.visited && neighbor_node.distToHere > current.distToHere + cost
                        
                        neighbor_node.parent.removeChild(neighbor_node);
                        
-                       neighbor_node.setParent(current, 1);
+                       neighbor_node.setParent(current, cost);
                        
                        %now push onto the priority queue
                         p_queue.Insert(neighbor_node.totalDist, neighbor_node);
-
                    end
                end
 

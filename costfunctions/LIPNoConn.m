@@ -1,6 +1,6 @@
 function total_cost = LIPNoConn(n1, n2, path, cawo)
     %cost is line integral of probability of no connection (linearly interpolated) 
-    %for variable transmit power
+    %for variable transmit power, paritally observable channe;
     total_cost = 0;
     p_no_conn_a = 1 - cawo.posteriorPConn(path(1,:));
     for i=2:length(path)

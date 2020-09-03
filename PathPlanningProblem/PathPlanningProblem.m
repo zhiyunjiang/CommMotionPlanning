@@ -192,8 +192,8 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
         
         function neighbors = getGridNeighbors(this, grid_loc)
            neighbors = [];
-           offsets = [[0,1];[1,0];[-1, 0];[0, -1]];
-           for i=1:4
+           offsets = [[0,1];[1,0];[-1, 0];[0, -1];[1,1];[1, -1];[-1, -1];[-1, 1]];
+           for i=1:length(offsets)
               neighbor = grid_loc + offsets(i,:); 
               if this.gridPtInRegion(neighbor)
                   %now check for obstacles

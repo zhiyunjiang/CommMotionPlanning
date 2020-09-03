@@ -66,54 +66,26 @@ classdef CommChannel < handle
             this.gammaSHdB = gamma_SH_dB;
         end
         
-        function gamma_MP_dB = simulateMP(this)
-            gamma_MP_lin = generate_multipath(this.channelParams.lambda, this.gx, this.gy, ...
-                this.res, this.channelParams.kRic, this.channelParams.corrMP);
-            gamma_MP_dB = 10*log10(gamma_MP_lin);
-            this.gammaMPdB = gamma_MP_dB;
+        function gamma_MP_dB = simulateMP(this, mp_model)
+            if nargin == 1
+                mp_model = 1;%default to Rician
+            end
+            
+            if mp_model == 1%Rician MP
+                gamma_MP_lin = generate_multipath(this.channelParams.lambda, this.gx, this.gy, ...
+                    this.res, this.channelParams.kRic, this.channelParams.corrMP);
+                gamma_MP_dB = 10*log10(gamma_MP_lin);
+                this.gammaMPdB = gamma_MP_dB;
+            elseif mp_model == 2%log linear model
+                %get size
+                sz = size(this.getGammaPLdB());
+                this.gammaMPdB = this.channelParams.sigmaMP*randn(sz);
+            end
+            
         end
         
         function gamma_TOT_dB = getGammaTOTdB(this)
             gamma_TOT_dB = this.gammaPLdB + this.gammaSHdB + this.gammaMPdB;
-        end
-        
-        function plot(this, components)
-            if nargin==1 || components == 0
-                gamma = this.getGammaTOTdB();
-                component_labels = 'PL + SH + MP';
-            elseif components == 1
-                %pathloss only
-                gamma = this.gammaPLdB;
-                component_labels = 'PL';
-            elseif components == 2
-                %shadowing only
-                gamma = this.gammaSHdB;
-                component_labels = 'SH';
-            elseif components == 3
-                %multipath only
-                gamma = this.gammaMPdB;
-                component_labels = 'MP';
-            elseif components == 4
-                %pathloss and shadowing
-                gamma = this.gammaPLdB + this.gammaSHdB;
-                component_labels = 'PL + SH';
-            end
-            y_label = strcat('Received Power (', component_labels, ') (dBm)');
-            f = figure;
-            fnt_siz = 16;
-            
-            surf(this.gx, this.gy, gamma, 'EdgeColor','none');
-            % light
-            % shading interp
-            xlabel('x (m)', 'FontSize', fnt_siz,  'FontWeight', 'bold');
-            ylabel('y (m)', 'FontSize', fnt_siz,  'FontWeight', 'bold');
-            zlabel(y_label,'FontSize', fnt_siz ,  'FontWeight','bold');
-            axis tight
-            grid on
-            set(gca, 'FontSize', fnt_siz, 'FontWeight', 'bold');
-
-            maximize(f)
-
         end
         
         function gamma_PL_dB = getGammaPLdB(this)
@@ -126,6 +98,13 @@ classdef CommChannel < handle
         
         function gamma_MP_dB = getGammaMPdB(this)
             gamma_MP_dB = this.gammaMPdB;
+        end
+        
+        function [sample_pos, sample_vals] = randSample(this, n)
+           xs = randi(round(this.region(1)*this.res) ,[n,1]);
+           ys = randi(round(this.region(3)*this.res) , [n,1]);
+           sample_pos = [xs,ys];
+           sample_vals = this.getGammaTOTdBAtPoint(sample_pos);
         end
         
         function gamma_PL_dB_at_point = getGammaPLdBAtPoint(this, point)
@@ -144,7 +123,9 @@ classdef CommChannel < handle
             gamma_TOT_dB = this.getGammaTOTdB();
             %take into account that grids are 0 indexed, but gamma arrays
             %are 1 indexed
-            gamma_TOT_dB_at_point = gamma_TOT_dB(point(2) + 1, point(1) + 1);
+            point = point + 1;%shift over by one to match matrix indices
+            lin_idx = sub2ind(size(gamma_TOT_dB), point(:,2), point(:,1));
+            gamma_TOT_dB_at_point = gamma_TOT_dB(lin_idx);
         end
         
         %INCOMPLETE
@@ -191,6 +172,83 @@ classdef CommChannel < handle
                end
            end
         end  
+        
+        function plot(this, components, plot2d)
+            if nargin < 3
+                plot2d = 0;
+            end
+            
+            if nargin==1 || components == 0
+                gamma = this.getGammaTOTdB();
+                component_labels = 'PL + SH + MP';
+            elseif components == 1
+                %pathloss only
+                gamma = this.gammaPLdB;
+                component_labels = 'PL';
+            elseif components == 2
+                %shadowing only
+                gamma = this.gammaSHdB;
+                component_labels = 'SH';
+            elseif components == 3
+                %multipath only
+                gamma = this.gammaMPdB;
+                component_labels = 'MP';
+            elseif components == 4
+                %pathloss and shadowing
+                gamma = this.gammaPLdB + this.gammaSHdB;
+                component_labels = 'PL + SH';
+            end
+            
+            f = figure;
+            fnt_siz = 16;
+            if ~plot2d
+                
+                surf(this.gx, this.gy, gamma, 'EdgeColor','none');
+                % light
+                % shading interp
+                xlabel('x (m)', 'FontSize', fnt_siz,  'FontWeight', 'bold');
+                ylabel('y (m)', 'FontSize', fnt_siz,  'FontWeight', 'bold');
+                z_label = strcat('Received Power (', component_labels, ') (dBm)');
+                zlabel(z_label,'FontSize', fnt_siz ,  'FontWeight','bold');
+                axis tight
+                grid on
+                set(gca, 'FontSize', fnt_siz, 'FontWeight', 'bold');
+            else
+                imagesc(0,0, gamma);
+                
+                c = colorbar;
+                c.Label.String = 'Received Power (dBm)';
+                xlabel('x (m)');
+                ylabel('y (m)');
+                title(strcat('Received Power (', component_labels, ')'));
+            end
+            
+
+        end
+        
+        function plotConnected(this, gamma_th)
+            gamma = this.getGammaTOTdB();
+            conn = double((gamma >= gamma_th));
+            
+            imagesc(0,0, conn);
+            colormap([0.5 0.5 0.5; 0 0 0.75]);
+            colorbar('YTick',[0.25 0.75],'YTicklabel',{'Disconnected', 'Connected'},'FontSize', 7, 'FontName', 'Calibri')
+            title(strcat('Connected Regions for \Gamma_{th} = ', sprintf('%d dBm', gamma_th))) ;
+            xlabel('x (m)');
+            ylabel('y (m)');
+        end
+        
+        function plotRequiredTXPower(this, receiver_noise, BER, R)
+            K =  -1.5/log(5*BER);
+            gamma = this.getGammaTOTdB();
+            CNR_lin = 10.^(gamma/10) / receiver_noise;
+            req_power = ((2^R - 1)/K)*(1./CNR_lin);
+            imagesc(0, 0, req_power);
+            c = colorbar;
+            c.Label.String = 'Required TX Power (mW)';
+            title(sprintf('Required TX Power, BER = %d', BER));
+        end
+        
     end
     
     methods (Access = private)

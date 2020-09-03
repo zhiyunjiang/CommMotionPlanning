@@ -50,8 +50,7 @@ classdef CAWithObservations< handle
             mean = this.calcMean(K, pos);
         end
         
-        function plotPosteriors(this)
-           
+        function plotPosteriors2D(this)
            res = this.cc.res;
            region = this.cc.region()*res;
            x_counts = region(1) - region(2) + 1;
@@ -62,19 +61,44 @@ classdef CAWithObservations< handle
                     x_grid = i-1;
                     y_grid = j-1;
                     p_conn = this.posteriorPConn([x_grid, y_grid]);
-                    post_map(i,j,:) = [x_grid, y_grid, p_conn];
+                    post_map(j,i,:) = [x_grid, y_grid, p_conn];
               end
            end
          
-           h = imagesc(post_map(:,:,3));
-           set(h, 'XData', [0, x_counts-1]);
-           set(h, 'YData', [0, y_counts-1]);
-           colorbar;
-           zlabel('Posterior Probability of Connectivity')
-           
+           imagesc(0,0, post_map(:,:,3));
+           c = colorbar;
+           c.Label.String = 'Probability of Connectivity';
+           xlabel(sprintf('x (%g m)', 1/this.cc.res));
+           ylabel(sprintf('y (%g m)', 1/this.cc.res));
         end
         
-         function plotMeans(this)
+         function plotConnected2D(this, p_th)
+           res = this.cc.res;
+           region = this.cc.region()*res;
+           x_counts = region(1) - region(2) + 1;
+           y_counts = region(3) - region(4) + 1;
+           post_map = zeros([x_counts, y_counts,3]);
+           for i = 1:x_counts
+              for j = 1:y_counts
+                    x_grid = i-1;
+                    y_grid = j-1;
+                    conn = this.posteriorPConn([x_grid, y_grid]) >= p_th;
+                    post_map(j,i,:) = [x_grid, y_grid, conn];
+              end
+           end
+         
+           imagesc(0,0, post_map(:,:,3));
+           colormap([0.5 0.5 0.5; 0 0 0.5]);
+           colorbar;
+           colorbar('YTick',[0.25 0.75],'YTicklabel',{'Disconnected', 'Connected'},...
+                    'FontSize', 7, 'FontName', 'Calibri')
+           title(strcat('Connected Regions for \Gamma_{th} = ', sprintf('%d dBm', this.gammaTH),...
+                           ', p_{conn} >= ', sprintf('%g',p_th))) ;
+           xlabel(sprintf('x (%g m)', 1/this.cc.res));
+           ylabel(sprintf('y (%g m)', 1/this.cc.res));
+         end
+        
+         function plotMeans2D(this)
            
            res = this.cc.res;
            region = this.cc.region()*res;
@@ -86,17 +110,44 @@ classdef CAWithObservations< handle
                     x_grid = i-1;
                     y_grid = j-1;
                     p_conn = this.posteriorExpecteddB([x_grid, y_grid]);
-                    post_map(i,j,:) = [x_grid, y_grid, p_conn];
+                    post_map(j,i,:) = [x_grid, y_grid, p_conn];
               end
            end
          
-           h = imagesc(post_map(:,:,3)');
-           set(h, 'XData', [0, x_counts-1]);
-           set(h, 'YData', [0, y_counts-1]);
-           colorbar;
-           zlabel('Posterior Expected PL dB')
-           
-        end
+           imagesc(0, 0, post_map(:,:,3));
+           c = colorbar;
+           c.Label.String = 'Expected Channel Power, dBm';
+           xlabel(sprintf('x (%g m)', 1/this.cc.res));
+           ylabel(sprintf('y (%g m)', 1/this.cc.res));
+           title('Expected Channel Power');
+         end
+        
+         function plotRequiredTXPower2D(this, receiver_noise, BER, R)
+           K =  -1.5/log(5*BER);
+           res = this.cc.res;
+           region = this.cc.region()*res;
+           x_counts = region(1) - region(2) + 1;
+           y_counts = region(3) - region(4) + 1;
+           post_map = zeros([x_counts, y_counts,3]);
+           for i = 1:x_counts
+              for j = 1:y_counts
+                    x_grid = i-1;
+                    y_grid = j-1;
+                    expected_gamma = this.posteriorExpecteddB([x_grid, y_grid]);
+                    CNR_lin = 10.^(expected_gamma/10) / receiver_noise;
+                    req_power = ((2^R - 1)/K)*(1./CNR_lin);
+                    post_map(j,i,:) = [x_grid, y_grid, req_power];
+              end
+           end
+         
+           imagesc(0, 0, post_map(:,:,3));
+           c = colorbar;
+           c.Label.String = 'Expected Required TX Power, mW';
+           xlabel(sprintf('x (%g m)', 1/this.cc.res));
+           ylabel(sprintf('y (%g m)', 1/this.cc.res));
+           title(sprintf('Expected Required TX Power, BER = %d', BER))
+         end
+         
     end
     
     methods (Access = private)

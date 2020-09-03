@@ -535,7 +535,10 @@ classdef ChannelAnalyzer < handle
            else
                %actually need to implement Rician CDF here
                %convert from dB to linear for rician
-               x_lin = 10.^(x/20);
+               %appeared to be working when dividing by 20, as Arjun does
+               %in Python script, but based on simulation, should be
+               %dividing by 10
+               x_lin = 10.^(x/10);
                %cp = this.ricDist.cdf(x_lin);
                
                %find closest entry in LUT
