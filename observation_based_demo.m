@@ -103,21 +103,20 @@ circle_grid = [CircObs(1.5, [5,5]), CircObs(1.5, [5, 10]),...
     CircObs(1.5, [10,17.5]), CircObs(1.5, [10, 22.5]),...
     CircObs(1.5, [15, 5]), CircObs(1.5, [15, 10]),...
     CircObs(1.5, [15,15]), CircObs(1.5, [15, 20])];
-simple = [CircObs(2,[10,10]), CircObs(2,[20,5]), CircObs(2,[5,20])]; 
+simple = [CircObs(3,[41,15]), CircObs(3,[37,30]), CircObs(3,[44,43])]; 
 no_obs = [];
 
 goal = [45, 2];
 
-obs_mod = ObstacleMod(no_obs);
-thetas = [0,0.2, 0.4, 0.6, 0.8, 1];
-
+obs_mod = ObstacleMod(simple);
+thetas = [0,0.2, 0.4, 0.6, 0.8, 1]; 
 for i = 1:length(thetas)
     theta = thetas(i);
 cost_fxn = @(n1, n2, path, mode) MinPNoConn(n1, n2, path, cawo, p_min, theta);
 %receiver noise in mW
 %cost_fxn = @(n1, n2, path, mode) LIExpectedTotalEnergy(n1, n2, path, cawo, receiver_noise, R, K);
 %path_res = res;
-problem_instance = PathPlanningProblem(region, path_res, source, goal, obs_mod, cost_fxn);
+problem_instance = PathPlanningProblem(region, res, source, goal, obs_mod, cost_fxn);
 if i == 1
 hold on
 problem_instance.plotProb(1)
@@ -152,12 +151,12 @@ bsf = rrt_solver.getBSF();
 rrt_path = bsf.pathToRoot(0);
 %%%
 hold on
-plot_handle = plot(rrt_path(:,1), rrt_path(:,2), 'LineWidth', 2, ...
+plot_handles(i) = plot(rrt_path(:,1), rrt_path(:,2), 'LineWidth', 2, ...
             'DisplayName', strcat('RRT* Path, \theta = ', sprintf('%0.2f', theta)));
 
 end
-
-legend;
+%%
+legend(plot_handles);
 %%
 %get series of BSF and plot over time
 series_data = rrt_solver.getBSFTimeSeries();

@@ -84,12 +84,12 @@ circle_grid = [CircObs(1.5, [5,5]), CircObs(1.5, [5, 10]),...
     CircObs(1.5, [10,17.5]), CircObs(1.5, [10, 22.5]),...
     CircObs(1.5, [15, 5]), CircObs(1.5, [15, 10]),...
     CircObs(1.5, [15,15]), CircObs(1.5, [15, 20])];
-simple = [CircObs(2,[10,10]), CircObs(2,[20,5]), CircObs(2,[5,20])]; 
+simple = [CircObs(3,[34,10]), CircObs(3,[37,44]), CircObs(3,[34,30])]; 
 no_obs = [];
 
 goal = [35, 2];
 
-obs_mod = ObstacleMod(no_obs);
+obs_mod = ObstacleMod(simple);
 theta = 0.01;
 %cost_fxn = @(n1, n2, path, mode) MinNoConn(n1, n2, path, cc, gamma_min, theta);
 %receiver noise in mW
@@ -106,7 +106,7 @@ problem_instance.plotProb(1)
 solution_not_required = 0;
 max_iterations = Inf;
 %max run time in seconds
-mins = 10;
+mins = 5;
 max_run_time = mins*60;
 stop_criteria = StopCriteria(solution_not_required, max_iterations, max_run_time);
 
