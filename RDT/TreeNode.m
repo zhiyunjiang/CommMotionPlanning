@@ -151,8 +151,7 @@ classdef TreeNode < handle
         function propogateDiff(this, diff)
             this.distToHere = this.distToHere - diff;
             for i = 1:length(this.children)
-                child = this.children(i);
-                child.propogateDiff(diff);
+                this.children(i).propogateDiff(diff);
             end
         end
     end

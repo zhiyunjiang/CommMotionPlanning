@@ -97,7 +97,7 @@ classdef RDTree < handle
             else
                 %handle the case where we resample an already sampled
                 %point. Need to rewire. Look into literature
-                this.rewire(nearest,pppi)
+                this.rewire(nearest, pppi)
             end
         end
          
@@ -113,12 +113,11 @@ classdef RDTree < handle
          %addNode
          function new_node = addNode(this, nearest, path, do_rewire, pppi)
             new_node = TreeNode(path(end,:));
+            %mode = 2 - update node data (if distance metric requires it)
+            cost = pppi.pathCost(new_node, nearest, path, 2);
+            new_node.setParent(nearest, cost, path); 
             if do_rewire
-                this.rewire(new_node);
-            else
-                %mode = 2 - update node data (if distance metric requires it)
-                cost = pppi.pathCost(new_node, nearest, path, 2);
-                new_node.setParent(nearest, cost, path); 
+                this.rewire(new_node, pppi);
             end
             this.treeNodes = [this.treeNodes, new_node];
          end
@@ -135,48 +134,56 @@ classdef RDTree < handle
             radius = min(this.steerRad, this.gamma*sqrt(log(cardV)/cardV));
             neighbors = this.near(new_node.wrkspcpos, radius);
             
+            
             cost_btwn = -1*ones(size(neighbors));
             x_current = new_node.wrkspcpos;
-            min_cost = Inf;
+            best_neighbor = new_node.parent;
+            min_cost = new_node.distToHere;
+            min_cost_btwn = min_cost - best_neighbor.distToHere;
+            best_path = new_node.pathFromParent;
             %first, find the least cost path to current
             for i = 1:length(neighbors)
                 neighbor = neighbors(i);
-                path = this.getSLPath(x_current, neighbor.wrkspcpos);
+                if neighbor == new_node.parent
+                    continue;
+                end
+                %want path from from  neighbor to current
+                path = this.getSLPath(neighbor.wrkspcpos, x_current);
                 
                 viable_path = pppi.collisionFree(path);
                 if norm(size(viable_path) - size(path)) == 0
                     %full path works!
-                    cost = this.theta*pppi.pathCost(new_node, neighbor, path, 1);
-                    cost_to_new_via_neighbor = cost + neighbor.distToHere;
-                    cost_btwn(i) = cost_to_new_via_neighbor;
+                    cost_btwn(i) = this.theta*pppi.pathCost(new_node, neighbor, path, 1);
+                    cost_to_new_via_neighbor = cost_btwn(i) + neighbor.distToHere;
                     if cost_to_new_via_neighbor < min_cost
                         %check if path is viable
                         %check to make sure there's nothing obstructing
-
+                           best_path = path;
                            best_neighbor = neighbor;
                            min_cost = cost_to_new_via_neighbor;
+                           min_cost_btwn = cost_btwn(i);
                     end
                 end
             end
             
-            new_node.setParent(best_neighbor, cost, path); 
-            
+            %handle case where we have resampled and are rewiring the
+            %resampled point. In this case, the "new" node will have a
+            %parent
+            new_node.setParent(best_neighbor, min_cost_btwn, best_path); 
+           
             %now check if there are any nodes that we can reach with less
             %cost from our new_node
             for j = 1:length(neighbors)
                neighbor = neighbors(j);
-               cost_btwn(j) = cost;
+               cost = cost_btwn(j);
                if cost >= 0
 
                     if (neighbor.distToHere > (new_node.distToHere + cost)) 
                        %we've already seen that there's nothing
                        %obstructing from the first time we looped through
 
-                       %do the actual rewiring
-                       %remove this child from it's parent
-                       old_parent = neighbor.parent;
-                       old_parent.removeChild(neighbor);
-
+                       %path from new to neighbor
+                       path = this.getSLPath(x_current, neighbor.wrkspcpos);
                        %now add the new parent
                        neighbor.setParent(new_node, cost, path);
                     end
@@ -214,7 +221,7 @@ classdef RDTree < handle
              for i = 1:length(this.treeNodes)
                node = this.treeNodes(i);
                dist = norm(node.getPos() - pt);
-               if dist < radius
+               if dist < radius && dist ~= 0%ignore if it's the same point
                   neighbors = [neighbors, node];
                end
             end

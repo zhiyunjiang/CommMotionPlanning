@@ -77,7 +77,7 @@ cc.simulateSH(); cc.simulateMP();
 %2 - max/AND
 %3 - sum
 scenario = 3;
-receiver_noise = 1e-10; R = 6; BER = 1e-6; K = -1.5/log(5*BER);
+receiver_noise = 1e-10; R = 6; BER = 1e-6;
 qos = QoSParams(BER, R, receiver_noise);
 
 cc.plotRequiredTXPower(qos)
