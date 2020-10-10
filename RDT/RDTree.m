@@ -111,17 +111,16 @@ classdef RDTree < handle
     methods (Access = private)
 
          %addNode
-         function n_new = addNode(this, nearest, path, do_rewire, pppi)
+         function new_node = addNode(this, nearest, path, do_rewire, pppi)
             new_node = TreeNode(path(end,:));
-            %mode = 2 - update node data (if distance metric requires it)
-            dist = pppi.pathCost(new_node, nearest, path, 2);
-            new_node.setParent(nearest, dist, path); 
-            this.treeNodes = [this.treeNodes, new_node];
-            
-            n_new = new_node;
             if do_rewire
-                this.rewire(n_new, pppi);
+                this.rewire(new_node);
+            else
+                %mode = 2 - update node data (if distance metric requires it)
+                cost = pppi.pathCost(new_node, nearest, path, 2);
+                new_node.setParent(nearest, cost, path); 
             end
+            this.treeNodes = [this.treeNodes, new_node];
          end
         
         %rewire
@@ -130,40 +129,56 @@ classdef RDTree < handle
         % TODO - implement with balanced box decomposition
         %can be implemented in O(log n) time using Balanced Box Decomposition
         %currently is O(n) (brute force)
-        function rewire(this, current, pppi)
+        function rewire(this, new_node, pppi)
             %See Karaman & Frazzoli, 2011
             cardV = length(this.treeNodes);
             radius = min(this.steerRad, this.gamma*sqrt(log(cardV)/cardV));
+            neighbors = this.near(new_node.wrkspcpos, radius);
             
-            x_current = current.wrkspcpos;
-            %the last node in the list will be the one we just added, i.e.
-            %current, so don't bother checking that one
-            max_i = length(this.treeNodes)-1;
-            for i = 1:max_i
-               this_vertex = this.treeNodes(i);
-               x_this = this_vertex.wrkspcpos;
-               %use Eucliden distance for the neighborhood radius check
-               dist = norm(x_this - x_current);
-               
-               if (dist <= radius) && (this_vertex ~= current)
-                   path = this.getSLPath(x_current, x_this);
-                   %TODO - rework rewiring so that recalculation of
-                   %distances is coherent
-                   cost = this.theta*pppi.pathCost(current, this_vertex, path, 1);
-
-                    if (this_vertex.distToHere > (current.distToHere + cost)) 
+            cost_btwn = -1*ones(size(neighbors));
+            x_current = new_node.wrkspcpos;
+            min_cost = Inf;
+            %first, find the least cost path to current
+            for i = 1:length(neighbors)
+                neighbor = neighbors(i);
+                path = this.getSLPath(x_current, neighbor.wrkspcpos);
+                
+                viable_path = pppi.collisionFree(path);
+                if norm(size(viable_path) - size(path)) == 0
+                    %full path works!
+                    cost = this.theta*pppi.pathCost(new_node, neighbor, path, 1);
+                    cost_to_new_via_neighbor = cost + neighbor.distToHere;
+                    cost_btwn(i) = cost_to_new_via_neighbor;
+                    if cost_to_new_via_neighbor < min_cost
+                        %check if path is viable
                         %check to make sure there's nothing obstructing
-                        viable_path = pppi.collisionFree(path);
-                        
-                        if norm(size(viable_path) - size(path)) == 0
-                           %do the actual rewiring
-                           %remove this child from it's parent
-                           old_parent = this_vertex.parent;
-                           old_parent.removeChild(this_vertex);
-                           
-                           %now add the new parent
-                           this_vertex.setParent(current, cost, path);
-                        end
+
+                           best_neighbor = neighbor;
+                           min_cost = cost_to_new_via_neighbor;
+                    end
+                end
+            end
+            
+            new_node.setParent(best_neighbor, cost, path); 
+            
+            %now check if there are any nodes that we can reach with less
+            %cost from our new_node
+            for j = 1:length(neighbors)
+               neighbor = neighbors(j);
+               cost_btwn(j) = cost;
+               if cost >= 0
+
+                    if (neighbor.distToHere > (new_node.distToHere + cost)) 
+                       %we've already seen that there's nothing
+                       %obstructing from the first time we looped through
+
+                       %do the actual rewiring
+                       %remove this child from it's parent
+                       old_parent = neighbor.parent;
+                       old_parent.removeChild(neighbor);
+
+                       %now add the new parent
+                       neighbor.setParent(new_node, cost, path);
                     end
                end
             end
@@ -192,6 +207,17 @@ classdef RDTree < handle
             
            path = this.getSLPath(start, new);
             
+        end
+        
+        function neighbors = near(this, pt, radius)
+            neighbors = [];
+             for i = 1:length(this.treeNodes)
+               node = this.treeNodes(i);
+               dist = norm(node.getPos() - pt);
+               if dist < radius
+                  neighbors = [neighbors, node];
+               end
+            end
         end
 
         % TODO - implement with balanced box decomposition (space O(n), 
