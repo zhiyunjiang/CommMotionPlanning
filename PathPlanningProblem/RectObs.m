@@ -63,7 +63,7 @@ classdef RectObs < IObstacle
             X = scale*([o.x_min, o.x_min, o.x_max, o.x_max] - offset(1));
             Y = scale*([o.y_min, o.y_max, o.y_max, o.y_min] - offset(2));
             plot(X, Y);
-            fill(X, Y, [0.5, 0.5 0.5]);
+            fill(X, Y, [0.25, 0.25 0.25]);
             
         end
     end
