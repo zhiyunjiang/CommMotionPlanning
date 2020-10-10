@@ -205,7 +205,7 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
            end
         end
        
-       function coord =  toGridCoordinate(this,val)
+        function coord =  toGridCoordinate(this,val)
            %toGridCoordinate - takes raw point (x,y) and converts to point
            %on grid by (1) shifting by offset, (2) scaling by resolution,
            %and (3) rounding to nearest point
@@ -218,17 +218,17 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
            else
                coord = round((val - this.offset)/this.getStepSize());
            end
-       end
+        end
        
-       function raw = toRawCoordinate(this, grd_val)
+        function raw = toRawCoordinate(this, grd_val)
            if this.resolution == Inf
                raw = grd_val + this.offset;
            else
                raw = (grd_val*this.getStepSize()) + this.offset;
            end
-       end
+        end
        
-       function plotProb(this, use_grid_scale)
+        function plotProb(this, use_grid_scale)
            scale = 1;
            offset = [0,0];
            obs_scale = this.resolution;
@@ -242,7 +242,7 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
            
            this.obstacleMod.plotObstacles(obs_scale, obs_offset);
            src = scale * this.getSourceGrid() + offset;
-           plot(src(1), src(2), 'gx');
+           plot(src(1), src(2), 'kx');
            dests = scale*this.goalRegion.goalGridPoints() + offset;
          
            scatter(dests(:,1), dests(:,2), 'ko');

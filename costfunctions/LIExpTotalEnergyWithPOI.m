@@ -25,7 +25,7 @@ function total_cost = LIExpTotalEnergyWithPOI(n1, n2, path, bs_cawo, receiver_no
 end
 
 function req_power = reqPower(cawo, receiver_noise, R, K, pos)
-    channel_power_dBm = cawo.posteriorExpecteddB(pos);
+    channel_power_dBm = cawo.getMeanAtGridPoint(pos);
     CNR_lin = 10.^(channel_power_dBm/10) / receiver_noise;
     req_power = ((2^R - 1)/K)*(1/CNR_lin);
 end

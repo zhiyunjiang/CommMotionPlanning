@@ -6,10 +6,10 @@ classdef CommChannel < handle
         nSin;
         region;
         res;
+        gx; gy;
     end
     
     properties(Access = private)
-        gx; gy;
         gammaPLdB;
         gammaSHdB;
         gammaMPdB;
@@ -67,6 +67,7 @@ classdef CommChannel < handle
         end
         
         function gamma_MP_dB = simulateMP(this, mp_model)
+            %TODO - allow for correlated MP fading
             if nargin == 1
                 mp_model = 1;%default to Rician
             end
@@ -90,6 +91,15 @@ classdef CommChannel < handle
         
         function gamma_PL_dB = getGammaPLdB(this)
             gamma_PL_dB = this.gammaPLdB;
+        end
+        
+        function setKPl(this,kpl)
+           diff = kpl - this.channelParams.kPL; 
+           this.gammaPLdB = this.gammaPLdB + diff;
+        end
+        
+        function setGammaPLdB(this, gamma)
+           this.gammaPLdB = gamma; 
         end
         
         function gamma_SH_dB = getGammaSHdB(this)
@@ -126,6 +136,24 @@ classdef CommChannel < handle
             point = point + 1;%shift over by one to match matrix indices
             lin_idx = sub2ind(size(gamma_TOT_dB), point(:,2), point(:,1));
             gamma_TOT_dB_at_point = gamma_TOT_dB(lin_idx);
+        end
+        
+        function req_power = getReqTXPowermW(this, qp, get_linear)
+            if nargin == 2
+                get_linear = 0;
+            end
+            
+            gamma = this.getGammaTOTdB();
+            req_power = qp.reqTXPower(gamma);
+            
+            if ~get_linear
+                req_power = 10*log10(req_power);
+            end
+        end
+        
+        function connection_field = getConnectionField(this, gamma_th)
+            gamma = this.getGammaTOTdB();
+            connection_field = double((gamma >= gamma_th));
         end
         
         %INCOMPLETE
@@ -214,39 +242,80 @@ classdef CommChannel < handle
                 grid on
                 set(gca, 'FontSize', fnt_siz, 'FontWeight', 'bold');
             else
-                imagesc(0,0, gamma);
                 
-                c = colorbar;
-                c.Label.String = 'Received Power (dBm)';
-                xlabel('x (m)');
-                ylabel('y (m)');
-                title(strcat('Received Power (', component_labels, ')'));
+                this.plotField(gamma, strcat('Received Power (', component_labels, ')'), ...
+                    'Received Power (dBm)');
             end
             
 
         end
         
         function plotConnected(this, gamma_th)
-            gamma = this.getGammaTOTdB();
-            conn = double((gamma >= gamma_th));
-            
-            imagesc(0,0, conn);
-            colormap([0.5 0.5 0.5; 0 0 0.75]);
-            colorbar('YTick',[0.25 0.75],'YTicklabel',{'Disconnected', 'Connected'},'FontSize', 7, 'FontName', 'Calibri')
-            title(strcat('Connected Regions for \Gamma_{th} = ', sprintf('%d dBm', gamma_th))) ;
-            xlabel('x (m)');
-            ylabel('y (m)');
+            connection_field = this.getConnectionField(gamma_th);
+            this.plotField(connection_field, strcat('Connected Regions for \Gamma_{th} = ', sprintf('%d dBm', gamma_th)));
         end
         
-        function plotRequiredTXPower(this, receiver_noise, BER, R)
-            K =  -1.5/log(5*BER);
-            gamma = this.getGammaTOTdB();
-            CNR_lin = 10.^(gamma/10) / receiver_noise;
-            req_power = ((2^R - 1)/K)*(1./CNR_lin);
-            imagesc(0, 0, req_power);
+        function plotRequiredTXPower(this,  qp, use_linear)
+            if nargin == 2
+                use_linear = 0;
+            end
+            
+            if use_linear
+                c_bar_label = 'Required TX Power (W)';
+            else
+                c_bar_label = 'Required TX Power (dB)';
+            end
+            req_power = this.getReqTXPowermW(qp, use_linear);
+            this.plotField(req_power,'Required TX Power',c_bar_label);  
+        end
+        
+        function plotDoubleConnectField(this, field, field_title)
+            imagesc(this.gx(1,:), this.gy(:,1), field);
+            set(gca, 'YDir', 'normal');
+            title(field_title);
+            xlabel('x (m)');
+            ylabel('y (m)');
+            
+            %only set the colorbar if we're given a label
             c = colorbar;
-            c.Label.String = 'Required TX Power (mW)';
-            title(sprintf('Required TX Power, BER = %d', BER));
+            no_conn = [0.5 0.5 0.5]; a_conn =[0 0.5 0]; b_conn = [0 0 0.5]; both_conn = [1 1 1];
+            colormap([no_conn; a_conn; b_conn; both_conn]);
+            colorbar_sec_size = 3/4;
+            first = colorbar_sec_size/2; second = first + colorbar_sec_size;
+            third = second + colorbar_sec_size; fourth = third + colorbar_sec_size;
+            colorbar('YTick',[first, second, third, fourth],'YTicklabel',...
+                {'Disconnected', 'A Only Connected', 'B Only Connected' 'Both Connected'},...
+                'FontSize', 7, 'FontName', 'Calibri');
+        end
+        
+        function plotField(this, field, field_title, c_bar_label)
+            imagesc(this.gx(1,:), this.gy(:,1), field);
+            set(gca, 'YDir', 'normal');
+            title(field_title);
+            xlabel('x (m)');
+            ylabel('y (m)');
+            
+            %only set the colorbar if we're given a label
+            c = colorbar;
+            if nargin==4
+                c.Label.String = c_bar_label;
+            else
+                colormap([0.5 0.5 0.5; 0 0 0.75]);
+                colorbar('YTick',[0.25 0.75],'YTicklabel',{'Disconnected', 'Connected'},'FontSize', 7, 'FontName', 'Calibri')
+            end
+        end
+        
+        function plotField3D(this, field, field_title, c_bar_label)
+            
+            surf(this.gx, this.gy, field, 'EdgeColor','none');
+            title(field_title)
+            % light
+            % shading interp
+            xlabel('x (m)');
+            ylabel('y (m)');
+            zlabel(c_bar_label);
+            axis tight
+            grid on
         end
         
     end

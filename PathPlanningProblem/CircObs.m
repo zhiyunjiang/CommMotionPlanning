@@ -55,7 +55,7 @@ classdef CircObs < IObstacle
             X = rad*cos(th) + cent(1);
             Y = rad*sin(th) + cent(2);
             plot(X, Y)
-            fill(X, Y, 'k');
+            fill(X, Y, [0.5, 0.5 0.5]);
         end
         
     end

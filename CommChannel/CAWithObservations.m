@@ -1,7 +1,7 @@
 classdef CAWithObservations< handle
     %CAWithOBservations  - All pos corrdinates in grid, not raw coordinates
     
-    properties
+    properties (Access = public)
         cp;
         cc;
         scaledDecorrSH;
@@ -14,7 +14,9 @@ classdef CAWithObservations< handle
         obsCov;
         UInv;
         
-        gammaTH
+        gammaTH;
+        
+         means;
     end
     
     methods (Access = public)
@@ -33,21 +35,21 @@ classdef CAWithObservations< handle
             this.UInv = (this.obsCov + this.cp.sigmaMP*eye(this.obsCount))^-1;
             
             this.gammaTH = gamma_th;
+            
+            this.setMeans();
+        end
+        
+        function mean = getMeanAtGridPoint(this, pt)
+           mean = this.means(pt(1)+1, pt(2) + 1); 
         end
         
         function p_conn = posteriorPConn(this, pos)
             phi = this.varPosWithObs(pos);
             K = phi'*this.UInv;
-            mean = this.calcMean(K, pos);
+            mean = this.means(pos(1) + 1, pos(2) + 1);
             variance = this.cp.sigmaSH^2 + this.cp.sigmaMP^2  - K*phi;
             
             p_conn = normcdf(this.gammaTH, mean, sqrt(variance), 'upper');
-        end
-        
-        function mean = posteriorExpecteddB(this, pos)
-            phi = this.varPosWithObs(pos);
-            K = phi'*this.UInv;
-            mean = this.calcMean(K, pos);
         end
         
         function plotPosteriors2D(this)
@@ -65,88 +67,92 @@ classdef CAWithObservations< handle
               end
            end
          
-           imagesc(0,0, post_map(:,:,3));
+           imagesc(this.cc.gx(1,:), this.cc.gy(:,1), post_map(:,:,3));
+           set(gca, 'YDir', 'normal');
            c = colorbar;
            c.Label.String = 'Probability of Connectivity';
-           xlabel(sprintf('x (%g m)', 1/this.cc.res));
-           ylabel(sprintf('y (%g m)', 1/this.cc.res));
+           xlabel('x (m)');
+           ylabel('y (m)');
         end
         
-         function plotConnected2D(this, p_th)
+        function conn_field = getConnectionField(this, p_th)
            res = this.cc.res;
            region = this.cc.region()*res;
            x_counts = region(1) - region(2) + 1;
            y_counts = region(3) - region(4) + 1;
-           post_map = zeros([x_counts, y_counts,3]);
+           conn_field = zeros([x_counts, y_counts]);
            for i = 1:x_counts
               for j = 1:y_counts
                     x_grid = i-1;
                     y_grid = j-1;
                     conn = this.posteriorPConn([x_grid, y_grid]) >= p_th;
-                    post_map(j,i,:) = [x_grid, y_grid, conn];
+                    conn_field(j,i) = conn;
               end
            end
-         
-           imagesc(0,0, post_map(:,:,3));
-           colormap([0.5 0.5 0.5; 0 0 0.5]);
-           colorbar;
-           colorbar('YTick',[0.25 0.75],'YTicklabel',{'Disconnected', 'Connected'},...
-                    'FontSize', 7, 'FontName', 'Calibri')
-           title(strcat('Connected Regions for \Gamma_{th} = ', sprintf('%d dBm', this.gammaTH),...
-                           ', p_{conn} >= ', sprintf('%g',p_th))) ;
-           xlabel(sprintf('x (%g m)', 1/this.cc.res));
-           ylabel(sprintf('y (%g m)', 1/this.cc.res));
-         end
+        end
         
-         function plotMeans2D(this)
-           
+        function plotConnected2D(this, p_th)
+           conn_field = this.getConnectionField(p_th);
+           title = strcat('Connected Regions for \Gamma_{th} = ', sprintf('%d dBm', this.gammaTH),...
+                           ', p_{conn} >= ', sprintf('%g',p_th));
+           this.cc.plotField(conn_field,title);
+        end
+         
+        function setMeans(this)
            res = this.cc.res;
            region = this.cc.region()*res;
            x_counts = region(1) - region(2) + 1;
            y_counts = region(3) - region(4) + 1;
-           post_map = zeros([x_counts, y_counts,3]);
+           this.means = zeros([x_counts, y_counts]);
            for i = 1:x_counts
               for j = 1:y_counts
                     x_grid = i-1;
                     y_grid = j-1;
                     p_conn = this.posteriorExpecteddB([x_grid, y_grid]);
-                    post_map(j,i,:) = [x_grid, y_grid, p_conn];
+                    this.means(j,i) = p_conn;
               end
            end
-         
-           imagesc(0, 0, post_map(:,:,3));
-           c = colorbar;
-           c.Label.String = 'Expected Channel Power, dBm';
-           xlabel(sprintf('x (%g m)', 1/this.cc.res));
-           ylabel(sprintf('y (%g m)', 1/this.cc.res));
-           title('Expected Channel Power');
-         end
+        end
         
-         function plotRequiredTXPower2D(this, receiver_noise, BER, R)
+        function plotMeans2D(this)
+           imagesc(this.cc.gx(1,:), this.cc.gy(:,1), this.means);
+           set(gca, 'YDir', 'normal');
+           c = colorbar;
+           c.Label.String = 'Expected Channel Power (dBm)';
+           xlabel('x (m)');
+           ylabel('y (m)');
+           title('Expected Channel Power');
+        end
+         
+        function exp_req_tx_pwr = calcReqTXPwr(this, receiver_noise, BER, R)
            K =  -1.5/log(5*BER);
            res = this.cc.res;
            region = this.cc.region()*res;
            x_counts = region(1) - region(2) + 1;
            y_counts = region(3) - region(4) + 1;
-           post_map = zeros([x_counts, y_counts,3]);
+           exp_req_tx_pwr = zeros([x_counts, y_counts]);
            for i = 1:x_counts
               for j = 1:y_counts
-                    x_grid = i-1;
-                    y_grid = j-1;
-                    expected_gamma = this.posteriorExpecteddB([x_grid, y_grid]);
+                    expected_gamma = this.means(i,j);
                     CNR_lin = 10.^(expected_gamma/10) / receiver_noise;
                     req_power = ((2^R - 1)/K)*(1./CNR_lin);
-                    post_map(j,i,:) = [x_grid, y_grid, req_power];
+                    exp_req_tx_pwr(j,i) = req_power;
               end
            end
-         
-           imagesc(0, 0, post_map(:,:,3));
+ 
+        end
+        
+        function plotRequiredTXPower2D(this, req_power)
+                    
+           imagesc(this.cc.gx(1,:), this.cc.gy(:,1), req_power);
+           set(gca, 'YDir', 'normal');
            c = colorbar;
            c.Label.String = 'Expected Required TX Power, mW';
-           xlabel(sprintf('x (%g m)', 1/this.cc.res));
-           ylabel(sprintf('y (%g m)', 1/this.cc.res));
-           title(sprintf('Expected Required TX Power, BER = %d', BER))
-         end
+           xlabel('x (m)');
+           ylabel('y (m)');
+           title('Expected Required TX Power');
+        end
+         
          
     end
     
@@ -177,6 +183,12 @@ classdef CAWithObservations< handle
             end
             
             cov = this.cp.sigmaSH^2*exp(-diffs/this.scaledDecorrSH);
+        end
+        
+        function mean = posteriorExpecteddB(this, pos)
+            phi = this.varPosWithObs(pos);
+            K = phi'*this.UInv;
+            mean = this.calcMean(K, pos);
         end
     end
 end

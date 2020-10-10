@@ -45,6 +45,12 @@ classdef ChannelAnalyzer < handle
            this.gammaSHVec = -this.u + this.delU*vec;
         end
         
+        function req_power = getReqTXPower(this, receiver_noise, R, K)
+            channel_power_dBm = this.commChannel.getGammaTOTdB();
+            CNR_lin = 10.^(channel_power_dBm/10) / receiver_noise;
+            req_power = ((2^R - 1)/K)*(1./CNR_lin);
+        end
+        
         function fpd_dists = simulateFPD(this, path, n_sims, is_markov)
             cc = this.commChannel;
             sims_run = 0;
