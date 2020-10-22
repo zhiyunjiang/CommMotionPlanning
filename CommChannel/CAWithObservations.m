@@ -57,13 +57,13 @@ classdef CAWithObservations< handle
            region = this.cc.region()*res;
            x_counts = region(1) - region(2) + 1;
            y_counts = region(3) - region(4) + 1;
-           post_map = zeros([x_counts, y_counts,3]);
+           post_map = zeros([x_counts, y_counts]);
            for i = 1:x_counts
               for j = 1:y_counts
                     x_grid = i-1;
                     y_grid = j-1;
                     p_conn = this.posteriorPConn([x_grid, y_grid]);
-                    post_map(j,i,:) = [x_grid, y_grid, p_conn];
+                    post_map(j,i) = p_conn;
               end
            end
          
@@ -108,14 +108,14 @@ classdef CAWithObservations< handle
               for j = 1:y_counts
                     x_grid = i-1;
                     y_grid = j-1;
-                    p_conn = this.posteriorExpecteddB([x_grid, y_grid]);
-                    this.means(j,i) = p_conn;
+                    expected_dB = this.posteriorExpecteddB([x_grid, y_grid]);
+                    this.means(i,j) = expected_dB;
               end
            end
         end
         
         function plotMeans2D(this)
-           imagesc(this.cc.gx(1,:), this.cc.gy(:,1), this.means);
+           imagesc(this.cc.gx(1,:), this.cc.gy(:,1), this.means');
            set(gca, 'YDir', 'normal');
            c = colorbar;
            c.Label.String = 'Expected Channel Power (dBm)';
@@ -124,8 +124,7 @@ classdef CAWithObservations< handle
            title('Expected Channel Power');
         end
          
-        function exp_req_tx_pwr = calcReqTXPwr(this, receiver_noise, BER, R)
-           K =  -1.5/log(5*BER);
+        function exp_req_tx_pwr = getEReqTXPowerW(this, qos)
            res = this.cc.res;
            region = this.cc.region()*res;
            x_counts = region(1) - region(2) + 1;
@@ -134,9 +133,7 @@ classdef CAWithObservations< handle
            for i = 1:x_counts
               for j = 1:y_counts
                     expected_gamma = this.means(i,j);
-                    CNR_lin = 10.^(expected_gamma/10) / receiver_noise;
-                    req_power = ((2^R - 1)/K)*(1./CNR_lin);
-                    exp_req_tx_pwr(j,i) = req_power;
+                    exp_req_tx_pwr(i,j) = qos.reqTXPower(expected_gamma);
               end
            end
  

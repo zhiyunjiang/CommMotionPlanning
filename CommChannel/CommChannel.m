@@ -273,19 +273,20 @@ classdef CommChannel < handle
             imagesc(this.gx(1,:), this.gy(:,1), field);
             set(gca, 'YDir', 'normal');
             title(field_title);
-            xlabel('x (m)');
-            ylabel('y (m)');
+            fnt_size = 12;
+            xlabel('x (m)', 'FontSize', fnt_size);
             
-            %only set the colorbar if we're given a label
-            c = colorbar;
+            ylabel('y (m)', 'FontSize', fnt_size);
+            
             no_conn = [0.5 0.5 0.5]; a_conn =[0 0.5 0]; b_conn = [0 0 0.5]; both_conn = [1 1 1];
             colormap([no_conn; a_conn; b_conn; both_conn]);
             colorbar_sec_size = 3/4;
             first = colorbar_sec_size/2; second = first + colorbar_sec_size;
             third = second + colorbar_sec_size; fourth = third + colorbar_sec_size;
+            
             colorbar('YTick',[first, second, third, fourth],'YTicklabel',...
-                {'Disconnected', 'A Only Connected', 'B Only Connected' 'Both Connected'},...
-                'FontSize', 7, 'FontName', 'Calibri');
+                {'Disconnected', 'A Only', 'B Only' 'Both'},...
+                'FontSize', 9, 'FontName', 'Calibri');
         end
         
         function plotField(this, field, field_title, c_bar_label)
@@ -295,7 +296,6 @@ classdef CommChannel < handle
             xlabel('x (m)');
             ylabel('y (m)');
             
-            %only set the colorbar if we're given a label
             c = colorbar;
             if nargin==4
                 c.Label.String = c_bar_label;

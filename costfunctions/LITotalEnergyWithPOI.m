@@ -1,4 +1,24 @@
-function total_cost = LITotalEnergyWithPOI(path, bs_cc, qos_params, mp, poi_cc, scenario)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% LITotalEnergyWithPOI
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Linear approximation of the line integral which gives the total
+% energy consumed over a path (both motion and communication). We assume
+% a linear interpolation of power between two  waypoints. With multiple
+% remote stations (poi), the rqeuired communication power depends on the
+% robots task (scenario).
+%
+% Inputs:
+% path - array of path waypoints. Path(i) = [xi, yi].
+% bs_cc - communication channel with the base station.
+% poi_cc - communication channel with the other remote station.
+% qp - quality of service parameters and settings
+% mp - motion parameters
+% scenario - the robots tak. 1 - sensing/surveillance. 2 - broadcasting.
+%                            3 - relaying
+% 
+% Outputs:
+% double energy_J - approximate energy consumed over path in Joules
+function energy_J = LITotalEnergyWithPOI(path, bs_cc, poi_cc, qos_params, mp, scenario)
     %based on (5) in "Motion-Communication Co-optimization with
     %Cooperative Load Transferin Mobile Robotics: an Optimal Control Perspective"
     %For variable transmit power, fully observale chanel
@@ -7,7 +27,7 @@ function total_cost = LITotalEnergyWithPOI(path, bs_cc, qos_params, mp, poi_cc, 
     
     v_const = mp.VConst; dist_scale = 1/bs_cc.res;
     
-    total_cost = 0;
+    energy_J = 0;
     bs_req_comm_power_a = qos_params.reqTXPower(bs_cc.getGammaTOTdBAtPoint(path(1,:)));
     poi_req_comm_power_a = qos_params.reqTXPower(poi_cc.getGammaTOTdBAtPoint(path(1,:)));
     for i=2:length(path)
@@ -33,7 +53,7 @@ function total_cost = LITotalEnergyWithPOI(path, bs_cc, qos_params, mp, poi_cc, 
             error('Scenario must take on value 1,2, or 3');
         end
         
-        total_cost = total_cost + mp.motionEnergy(dist) + comm_energy;
+        energy_J = energy_J + mp.motionEnergy(dist) + comm_energy;
         
         bs_req_comm_power_a = bs_req_comm_power_b;
         poi_req_comm_power_a = poi_req_comm_power_b;

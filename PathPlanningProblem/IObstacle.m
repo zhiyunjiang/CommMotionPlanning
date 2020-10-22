@@ -1,3 +1,8 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% IObstacle
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Obstacle interface. Allows us to create arbitrary obstacles
+
 classdef IObstacle < handle & matlab.mixin.Heterogeneous
     %IObstacle - Generic Obstacle interface
     

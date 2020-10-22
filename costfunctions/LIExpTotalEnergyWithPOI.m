@@ -1,32 +1,53 @@
-function total_cost = LIExpTotalEnergyWithPOI(n1, n2, path, bs_cawo, receiver_noise, R, K, poi_cawo)
-    %based on (5) in "Motion-Communication Co-optimization with
-    %Cooperative Load Transferin Mobile Robotics: an Optimal Control Perspective"
-    %For variable transmit power, partially observale chanel
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% LIExpectedTotalEnergyWithPOI
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Linear approximation of the line integral which gives the total
+% energy consumed over a path (both motion and communication). We assume
+% a linear interpolation of power between two  waypoints. With multiple
+% remote stations (poi), the rqeuired communication power depends on the
+% robots task (scenario).
+%
+% Inputs:
+% path - array of path waypoints. Path(i) = [xi, yi].
+% cawo - channle analyzer with observations object
+% cawo_poi - channle analyzer with observations object for the other remote
+%             station
+% qp - quality of service parameters and settings
+% mp - motion parameters
+% scenario - the robots tak. 1 - sensing/surveillance. 2 - broadcasting.
+%                            3 - relaying
+% 
+% Outputs:
+% double energy_J - approximate energy consumed over path in Joules
+
+function energy_J = LIExpTotalEnergyWithPOI(path, cawo, cawo_poi, qos, mp, scenario)
+    v_const = mp.VConst; dist_scale = 1/cawo.cc.res;
     
-    %also using motion energy as described in "Human-Robot Collaborative Site 
-    %Inspection under Resource Constraints"
-    k_1 = 7.4; k_2 = 0.29; v_const = 1*bs_cawo.cc.res;
+    energy_J = 0;
+    bs_req_comm_power_a = qos.reqTXPower(cawo.getMeanAtGridPoint(path(1,:)));
+    poi_req_comm_power_a = qos.reqTXPower(cawo_poi.getMeanAtGridPoint(path(1,:)));
     
-    total_cost = 0;
-    bs_req_comm_power_a = reqPower(bs_cawo, receiver_noise, R, K, path(1,:));
-    poi_req_comm_power_a = reqPower(poi_cawo, receiver_noise, R, K, path(1,:));
     for i=2:length(path)
-        dist = norm(path(i-1,:) - path(i,:));
-        bs_req_comm_power_b = reqPower(bs_cawo, receiver_noise, R, K, path(i,:));
-        poi_req_comm_power_b = reqPower(poi_cawo, receiver_noise, R, K, path(i,:));
-        motion_energy = (k_1 + (k_2/v_const))*dist;
-        %scale by 1/1000 to convert to Joules
-        bs_comm_energy = (dist/v_const)*(bs_req_comm_power_a + bs_req_comm_power_b)/(2*1000);
-        pos_comm_energy = (dist/v_const)*(poi_req_comm_power_a + poi_req_comm_power_b)/(2*1000);
-        total_cost = total_cost + motion_energy + bs_comm_energy + pos_comm_energy;
+        dist = dist_scale*norm(path(i-1,:) - path(i,:));%convert distance to meters
+        
+        bs_req_comm_power_b = qos.reqTXPower(cawo.getMeanAtGridPoint(path(i,:)));
+        poi_req_comm_power_b = qos.reqTXPower(cawo_poi.getMeanAtGridPoint(path(i,:)));
+
+        if scenario == 1
+            req_comm_power_a = min([bs_req_comm_power_a, poi_req_comm_power_a]);
+            req_comm_power_b = min([bs_req_comm_power_b, poi_req_comm_power_b]);
+        elseif scenario == 2
+            req_comm_power_a = max([bs_req_comm_power_a, poi_req_comm_power_a]);
+            req_comm_power_b = max([bs_req_comm_power_b, poi_req_comm_power_b]);
+        else
+            req_comm_power_a = bs_req_comm_power_a + poi_req_comm_power_a;
+            req_comm_power_b = bs_req_comm_power_b + poi_req_comm_power_b;
+        end
+
+        comm_energy = (dist/v_const)*(req_comm_power_a + req_comm_power_b);
+        energy_J = energy_J + mp.motionEnergy(dist) + comm_energy;
+        
         bs_req_comm_power_a = bs_req_comm_power_b;
         poi_req_comm_power_a = poi_req_comm_power_b;
     end
 end
-
-function req_power = reqPower(cawo, receiver_noise, R, K, pos)
-    channel_power_dBm = cawo.getMeanAtGridPoint(pos);
-    CNR_lin = 10.^(channel_power_dBm/10) / receiver_noise;
-    req_power = ((2^R - 1)/K)*(1/CNR_lin);
-end
-

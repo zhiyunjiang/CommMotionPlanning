@@ -1,3 +1,17 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% SimpsonWeights
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Calculates weights to be used for approximate integration via Simpsons
+% method
+%
+% Input:
+% n - number of intervals
+% h - array of n interval lengths
+% 
+% Output: 
+% w - weights to be used for simpson integration
+ 
+
 function w = SimpsonWeights(n, h)
     if n == 1
         %only a single interval, just average the two values, then multiply

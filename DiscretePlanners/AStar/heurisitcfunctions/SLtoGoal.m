@@ -1,3 +1,16 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% SLtoGoal
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Straight line euclidean distance to nearest goal point.
+%
+% Inputs:
+% grid_pt - [x,y] position of the node from which we are calculating the
+%           heuristic
+% pppi - PathPlaningProblem instance
+%
+% Outputs:
+% estimated2go - (under)estimated distance to go from grid_pt to goal.
+
 function estimated2go = SLtoGoal(grid_pt,pppi)
     goals = pppi.getGoalRegion.goalGridPoints;
     

@@ -23,6 +23,7 @@ classdef RDTree < handle
         
         %
         solCosts;
+        solDists;
         
         %neighborBoxes - data structure presented in "Minimising 
         %computational complexity of the RRT algorithm a practical
@@ -103,7 +104,9 @@ classdef RDTree < handle
          
         function recordBSFCost(this, time)
             if this.BSF.distToHere ~= Inf
-                this.solCosts = [this.solCosts; time, this.BSF.distToHere]; 
+                this.solCosts = [this.solCosts; time, this.BSF.distToHere];
+                path = this.BSF.pathToRoot(0);
+                this.solDists = [this.solDists; time, GridDist(path)];
             end
         end
     end

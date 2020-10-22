@@ -114,7 +114,7 @@ mp = MotionParams(k1 , k2, v_const);
 % cost_fxn = @(n1, n2, path, mode) MinNoConnWithPOI(n1, n2, path, cc, cc_poi, gamma_th, theta, use_or);
 cost_fxn = @(n1, n2, path, mode) LITotalEnergy(path, cc, qos, mp);
 
-% cost_fxn = @(n1, n2, path, mode) LITotalEnergyWithPOI(path, cc, qos, mp,  cc_poi, scenario);
+% cost_fxn = @(n1, n2, path, mode) LITotalEnergyWithPOI(path, cc, cc_poi, qos, mp, scenario);
 path_res = res;
 problem_instance = PathPlanningProblem(region, path_res, source, goal, obs_mod, cost_fxn);
 

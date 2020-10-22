@@ -56,8 +56,9 @@ classdef RDTSolver < handle
             tail = this.rdTree.BSF;
         end
         
-        function series = getBSFTimeSeries(this)
-            series = this.rdTree.solCosts;
+        function [costs, dists] = getBSFTimeSeries(this)
+            costs = this.rdTree.solCosts;
+            dists = this.rdTree.solDists;
         end
         
         function cost = minCostSoFar(this)

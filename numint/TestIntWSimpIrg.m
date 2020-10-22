@@ -10,27 +10,30 @@ x = [0;cumsum(h)];
 y = x.^3;
 %integral from 0 to 1 of x^3  = 1/4 (analytically)
 rslt = IntegrateWSimpsonsIrregular(y,h);
-er = rslt - (1/4)
+er1 = rslt - (1/4)
 
-h = (1/5)*ones([5,1]);
+n = 5;
+h = (1/n)*ones([n,1]);
 x = [0;cumsum(h)];
 y = x.^3;
-%integral from 0 to 1 of x^3  = 1/3 (analytically)
+%integral from 0 to 1 of x^3  = 1/4 (analytically)
 rslt = IntegrateWSimpsonsIrregular(y,h);
-er = rslt - (1/4)
+er2 = rslt - (1/4)
 
 
 %Test 2 - Unevenly spaced data
+%even number
 h = [0.2;0.17;0.33;0.3];
 x = [0;cumsum(h)];
 y = x.^3;
-%integral from 0 to 1 of x^3  = 1/3 (analytically)
+%integral from 0 to 1 of x^3  = 1/4 (analytically)
 rslt = IntegrateWSimpsonsIrregular(y,h);
-er = rslt - (1/4)
+er3 = rslt - (1/4)
 
+%odd number
 h = [0.17;0.21;0.33;0.2; 0.09];
 x = [0;cumsum(h)];
 y = x.^3;
-%integral from 0 to 1 of x^3  = 1/3 (analytically)
+%integral from 0 to 1 of x^3  = 1/4 (analytically)
 rslt = IntegrateWSimpsonsIrregular(y,h);
-er = rslt - (1/4)
+er4 = rslt - (1/4)

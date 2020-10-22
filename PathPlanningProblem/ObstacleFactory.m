@@ -1,5 +1,21 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% ObstacleFactory
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Collection of static methods for quickly generating different groups of
+% obstacles. These all assum a 50 x 50 workspace. All methods return an
+% ObsMod object.
+
 classdef ObstacleFactory
     
+    % Methods (static):
+    % maze - create a zig zag type set of obstacles 
+    % simple - three circular obstacles placed around vertical line at x=35
+    % noObs - creates an ObstacleMod object with no obstacles
+    % random - randomly places 6 circular objects with varying radii in
+    %           workspace
+    % cirlceGrid - places 7 circle obstacles in a grid, but with large
+    %               jitter and random radii
+    % custom - for ad hoc obstacle placement
     methods (Static)
         
         function obs_mod = maze()
@@ -45,6 +61,13 @@ classdef ObstacleFactory
                     valid = 1;
                 end
             end
+        end
+        
+        function obs_mod = custom()
+            obstacles = [CircObs(3.25, [10,32]), CircObs(3.75, [18,45]), ...
+                CircObs(3.5, [37,41]), CircObs(3.5, [35,15]),...
+                CircObs(3, [25,35]), CircObs(3.75, [13,10])];
+            obs_mod = ObstacleMod(obstacles);
         end
     end
 end

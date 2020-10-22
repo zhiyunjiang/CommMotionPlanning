@@ -1,9 +1,11 @@
-function exp_dist = ExpectedDistance(n1, n2, path, ca, mode)
-%ExpectedDistance - TreeNode X TreeNode -> positive real
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% ExpectedDistance
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Calculate the expected distance adding n2 to a tree path will add to the
-% path. Metric function to be used for RDT
-
-%INPUT
+% path. Not a valid RRT* cost function since it is not additive. The order
+% paths are visited affects the total cost of hte path
+%
+% Inputs:
 % TreeNode n1 - The node to be added to the graph
 % TreeNode n2 - The node already in the graph. 
 % path - points from n1 to n2, inclusive
@@ -11,8 +13,12 @@ function exp_dist = ExpectedDistance(n1, n2, path, ca, mode)
 % calculate probabilities.
 % mode - If mode == 1, just compute the distance. If mode == 2, also update
 % the 'J' and 'p_no_conn_to_here' attributes of n1
-%OUTPUT
+%
+% OUTPUT:
 % double exp_dist - expected distance added to the path 
+
+function exp_dist = ExpectedDistance(n1, n2, path, ca, mode)
+
 
     if nargin == 3
         mode = 1;

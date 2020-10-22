@@ -1,5 +1,29 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% GoalRegion
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Represents the destination of our path planning problem. The
+% destinatation region is taken to be a set of points from the simulated
+% communication channel, and will thus generally has the same resolution as
+% the communication channel simulation. This may differ from the problem
+% resolution.
+
 classdef GoalRegion < handle
     
+    % Properties (public):
+    % resolution - the resolution used for enumerating the set of poitns in
+    %               the goal region.
+    % offset - the offset of points in terms of the problem instance
+    %           resolution
+    % problemGridRegion - [x_max, 0, y_max, 0] the problem instance region
+    %                       with max dimensions in terms of problem
+    %                       resolution
+    % goalPoints - list of points (in problem resolution) within goal
+    %               region, pruned so that only points on border are inluded.
+    % goalGirdPoints - list of points (in  resolution) within goal
+    %               region, pruned so that only points on border are inluded.
+    % goalGridMap - map of maps. First map key is x corrdinate, second map
+    %               keys are y values. Use for quickly looking up whether 
+    %               or not a given point is in the goal region 
     properties
         resolution;
         offset;
@@ -12,6 +36,12 @@ classdef GoalRegion < handle
         goalGridMap;
     end
     
+    % Methods (public)
+    % (Constructor) - create new GoalRegion object
+    % rawPointInGoalRegion - check is a point not necessarily on the grid
+    %                           is in the goal region
+    % gridPointInGoalRegion - check if a point on the grid is in the goal
+    %                           region
     methods
         function this = GoalRegion(resolution, goal_points, offset, grid_region)
             if resolution == Inf
@@ -23,11 +53,32 @@ classdef GoalRegion < handle
             this.setGoals(goal_points);
         end
         
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % rawPointInGoalRegion
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % check is a point not necessarily on the grid is in the goal region
+        % Input:
+        % this - reference to the GoalRegion object
+        % pt - the point [x,y] we're interested in
+        %
+        % Output:
+        % tf - true if point is in goal region. False otherwise.
         function tf =  rawPointInGoalRegion(this, pt)
             grid_pt = this.toGridCoordinate(pt);
             tf = this.gridPointInGoalRegion(grid_pt);
         end
         
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % gridPointInGoalRegion
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % check if a point on the grid is in the goal region
+        % Input:
+        % this - reference to the GoalRegion object
+        % pt - the point [x,y] we're interested in
+        %
+        % Output:
+        % tf - true if point is in goal region. False otherwise.
         function tf = gridPointInGoalRegion(this, pt)
             tf = 0;
             x = pt(1);
@@ -69,14 +120,15 @@ classdef GoalRegion < handle
               y = this.goalGridPoints(i,2);
               if map.isKey(x)
                  submap = map(x);
+                 %submap(y) is a handle object - modification persists 
+                 %outside this function call
                  submap(y) = i;
               else
                   submap = containers.Map(y,i);
-                  map([x]) = submap;
+                  map(x) = submap;
               end
            end
         end
-
        
         function kept_indices = pruneDestinations(this)
             

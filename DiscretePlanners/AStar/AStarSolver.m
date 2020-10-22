@@ -1,6 +1,22 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% AStarSolver
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Solves a graph search optimization problem using A*. Saves relevant
+% information related to the solution for ease of analysis. Can be used to
+% solve using Dijkstra's algorithm, too.
+
+
 classdef AStarSolver < handle
-    %AStarSolver Summary of this class goes here
     
+    % Properties (public):
+    % heuristicFcn - the admissibile heuristic to use. Will default to a
+    %                function that always evalutes to 0 - i.e. Dijkstras
+    % isDijktras - is true, we've solved with Dijkstras (i.e. trivial
+    %               heuristic function)
+    % pppi - the path planning instance to be solved.
+    % BST - ASTNode representing the final node in the optimal path.
+    % root - ASTNode representing the root and thus initial node in the
+    %           optimal path.
     properties
         heuristicFcn;
         isDijkstras;
@@ -9,6 +25,10 @@ classdef AStarSolver < handle
         root;
     end
     
+    % Methods (public)
+    % (Constructor) AStarSolver - creates a new instace of the AStarSolver
+    %                               class
+    % solve - solves a path planning problem instance
     methods (Access = public)
         function this = AStarSolver(heuristic_fcn)
             if nargin == 1
@@ -20,12 +40,22 @@ classdef AStarSolver < handle
             end
         end
         
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % solve
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % solves a problem instance using A*. Sets the BST and root nodes.
+        % Input:
+        % this - reference to the AStarSolver object
+        % pppi - PathPlanningProblem instance to solve
         function solve(this, pppi)
             this.pppi = pppi;
             existing_nodes = containers.Map('KeyType','double','ValueType','any');
             
             %implement priority queue using RedBlack tree so that
             %insertion, searching, takes log(n) time where n is queue size.
+            %RedBlack tree us Brian Moore's implementation. See the
+            %Data_Structures folder.
             
             p_queue = RedBlackTree();
             start_pt = pppi.getSourceGrid();
