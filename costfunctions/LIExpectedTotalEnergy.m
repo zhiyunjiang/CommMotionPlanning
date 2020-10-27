@@ -10,12 +10,16 @@
 % cawo - channle analyzer with observations object
 % qp - quality of service parameters and settings
 % mp - motion parameters
+% delta - weighting parameter for motion energy. If not provided, defaults
+%           to 1 (equal weight with communication energy)
 %
 % Outputs:
 % double energy_J - approximate energy consumed over path in Joules
 
-function energy_J = LIExpectedTotalEnergy(path, cawo, qos, mp)
-    
+function energy_J = LIExpectedTotalEnergy(path, cawo, qos, mp, delta)
+    if nargin < 5
+       delta = 1; 
+    end
     
     v_const = mp.VConst; dist_scale = 1/cawo.cc.res;
     
@@ -26,7 +30,7 @@ function energy_J = LIExpectedTotalEnergy(path, cawo, qos, mp)
         req_comm_power_b = qos.reqTXPower(cawo.posteriorExpecteddB(path(i,:)));
 
         comm_energy = (dist/v_const)*(req_comm_power_a + req_comm_power_b)/2;
-        energy_J = energy_J + mp.motionEnergy(dist) + comm_energy;
+        energy_J = energy_J + delta*mp.motionEnergy(dist) + comm_energy;
         req_comm_power_a = req_comm_power_b;
     end
 end

@@ -1,3 +1,4 @@
+% all distance and coordaintes are in real terms
 classdef ChannelParams
     %ChannelParams - Contains parameters defining the communication channel
     properties

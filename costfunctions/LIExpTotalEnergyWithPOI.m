@@ -16,11 +16,13 @@
 % mp - motion parameters
 % scenario - the robots tak. 1 - sensing/surveillance. 2 - broadcasting.
 %                            3 - relaying
+% delta - weighting parameter for motion energy. If not provided, defaults
+%           to 1 (equal weight with communication energy)
 % 
 % Outputs:
 % double energy_J - approximate energy consumed over path in Joules
 
-function energy_J = LIExpTotalEnergyWithPOI(path, cawo, cawo_poi, qos, mp, scenario)
+function energy_J = LIExpTotalEnergyWithPOI(path, cawo, cawo_poi, qos, mp, scenario, delta)
     v_const = mp.VConst; dist_scale = 1/cawo.cc.res;
     
     energy_J = 0;
@@ -45,7 +47,7 @@ function energy_J = LIExpTotalEnergyWithPOI(path, cawo, cawo_poi, qos, mp, scena
         end
 
         comm_energy = (dist/v_const)*(req_comm_power_a + req_comm_power_b);
-        energy_J = energy_J + mp.motionEnergy(dist) + comm_energy;
+        energy_J = energy_J + delta*mp.motionEnergy(dist) + comm_energy;
         
         bs_req_comm_power_a = bs_req_comm_power_b;
         poi_req_comm_power_a = poi_req_comm_power_b;

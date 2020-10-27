@@ -22,7 +22,7 @@
 
 function total_cost = MinNoConnWithPOI(path, bs_cc, poi_cc, gamma_th_dBm, eps, scenario)
     %for fixed transmit power, fully observable channel
-    if nargin < 8
+    if nargin < 6
         scenario = 1;
     end
     total_cost = 0;

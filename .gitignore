@@ -3,3 +3,4 @@
 figs/**
 arjun_python/**
 *.asv
+*.mat

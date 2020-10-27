@@ -15,15 +15,20 @@
 % mp - motion parameters
 % scenario - the robots tak. 1 - sensing/surveillance. 2 - broadcasting.
 %                            3 - relaying
+% delta - weighting parameter for motion energy. If not provided, defaults
+%           to 1 (equal weight with communication energy)
 % 
 % Outputs:
 % double energy_J - approximate energy consumed over path in Joules
-function energy_J = LITotalEnergyWithPOI(path, bs_cc, poi_cc, qos_params, mp, scenario)
+function energy_J = LITotalEnergyWithPOI(path, bs_cc, poi_cc, qos_params, mp, scenario, delta)
     %based on (5) in "Motion-Communication Co-optimization with
     %Cooperative Load Transferin Mobile Robotics: an Optimal Control Perspective"
     %For variable transmit power, fully observale chanel
     %Motion energy as described in "Human-Robot Collaborative Site 
     %Inspection under Resource Constraints"
+    if nargin < 7
+        delta = 1;
+    end
     
     v_const = mp.VConst; dist_scale = 1/bs_cc.res;
     
@@ -53,7 +58,7 @@ function energy_J = LITotalEnergyWithPOI(path, bs_cc, poi_cc, qos_params, mp, sc
             error('Scenario must take on value 1,2, or 3');
         end
         
-        energy_J = energy_J + mp.motionEnergy(dist) + comm_energy;
+        energy_J = energy_J + delta*mp.motionEnergy(dist) + comm_energy;
         
         bs_req_comm_power_a = bs_req_comm_power_b;
         poi_req_comm_power_a = poi_req_comm_power_b;

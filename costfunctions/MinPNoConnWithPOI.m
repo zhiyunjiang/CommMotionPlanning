@@ -14,6 +14,7 @@
 %           station
 % pth - threshold probability. If probbaility of conenction is above this,
 %       count as connected.
+% gamma_th - threshold channel power
 % eps - small weight for total distance
 % scenario - the robots tak. 1 - sensing/surveillance. 2 - broadcasting.
 %                            3 - relaying
@@ -22,9 +23,9 @@
 % double total_cost - disconnected distance plus small weight for total
 %                       distance
 
-function total_cost = MinPNoConnWithPOI(path, bs_cawo, poi_cawo, pth, eps, scenario)
+function total_cost = MinPNoConnWithPOI(path, bs_cawo, poi_cawo, pth, gamma_th, eps, scenario)
     %for fixed transmit power, partially observable channel
-    if nargin < 6
+    if nargin < 7
         scenario = 1;
     end
     total_cost = 0;
@@ -34,11 +35,11 @@ function total_cost = MinPNoConnWithPOI(path, bs_cawo, poi_cawo, pth, eps, scena
         no_conn = @(conn1, conn2) ~(conn1 && conn2);
     end
     
-    bs_conn_a = ( bs_cawo.posteriorPConn(path(1,:)) >= pth );
-    poi_conn_a = ( poi_cawo.posteriorPConn(path(1,:)) >= pth );
+    bs_conn_a = ( bs_cawo.posteriorPConn(path(1,:), gamma_th) >= pth );
+    poi_conn_a = ( poi_cawo.posteriorPConn(path(1,:), gamma_th) >= pth );
     for i=2:length(path)
-        bs_conn_b = ( bs_cawo.posteriorPConn(path(i,:)) >= pth );
-        poi_conn_b = ( poi_cawo.posteriorPConn(path(i,:)) >= pth );
+        bs_conn_b = ( bs_cawo.posteriorPConn(path(i,:), gamma_th) >= pth );
+        poi_conn_b = ( poi_cawo.posteriorPConn(path(i,:), gamma_th) >= pth );
         dist = norm(path(i-1,:) - path(i,:));
         total_cost = total_cost + dist*...
             (eps + 0.5*( no_conn(bs_conn_a, poi_conn_a) + no_conn(bs_conn_b, poi_conn_b) ));

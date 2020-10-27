@@ -1,3 +1,5 @@
+%raw corrdinates - true coordinates
+%grid corrdinates - in terms of underlying grid used in simulation
 classdef CommChannel < handle
     %ChannelGenerator - Handles simulating/generating a channel
     
@@ -77,7 +79,7 @@ classdef CommChannel < handle
                     this.res, this.channelParams.kRic, this.channelParams.corrMP);
                 gamma_MP_dB = 10*log10(gamma_MP_lin);
                 this.gammaMPdB = gamma_MP_dB;
-            elseif mp_model == 2%log linear model
+            elseif mp_model == 2%log normal model
                 %get size
                 sz = size(this.getGammaPLdB());
                 this.gammaMPdB = this.channelParams.sigmaMP*randn(sz);
@@ -138,7 +140,7 @@ classdef CommChannel < handle
             gamma_TOT_dB_at_point = gamma_TOT_dB(lin_idx);
         end
         
-        function req_power = getReqTXPowermW(this, qp, get_linear)
+        function req_power = getReqTXPowerW(this, qp, get_linear)
             if nargin == 2
                 get_linear = 0;
             end
@@ -154,6 +156,14 @@ classdef CommChannel < handle
         function connection_field = getConnectionField(this, gamma_th)
             gamma = this.getGammaTOTdB();
             connection_field = double((gamma >= gamma_th));
+        end
+        
+        function res_pt = rawPoint2Res(this, point)
+            res_pt = this.res*(point - [this.region(2), this.region(4)]);
+        end
+        
+        function raw_pt = resPoint2Raw(this, point)
+            raw_pt = (point/this.res) + [this.region(2), this.region(4)];
         end
         
         %INCOMPLETE
@@ -340,13 +350,6 @@ classdef CommChannel < handle
             y_index = round(this.res*(point(2) - this.region(4)));
         end
         
-        function res_pt = rawPoint2Res(this, point)
-            res_pt = this.res*(point - [this.region(2), this.region(4)]);
-        end
-        
-        function raw_pt = resPoint2Raw(this, point)
-            raw_pt = (point/this.res) + [this.region(2), this.region(4)];
-        end
     end
 end
 

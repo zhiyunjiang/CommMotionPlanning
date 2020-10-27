@@ -140,14 +140,20 @@ classdef RDTree < handle
             
             cost_btwn = -1*ones(size(neighbors));
             x_current = new_node.wrkspcpos;
-            best_neighbor = new_node.parent;
-            min_cost = new_node.distToHere;
-            min_cost_btwn = min_cost - best_neighbor.distToHere;
-            best_path = new_node.pathFromParent;
+            if new_node.isRoot
+                min_cost = 0;
+                min_cost_btwn = 0;
+            else
+                best_neighbor = new_node.parent;
+                min_cost = new_node.distToHere;
+                min_cost_btwn = min_cost - best_neighbor.distToHere;
+                best_path = new_node.pathFromParent;
+            end
+            
             %first, find the least cost path to current
             for i = 1:length(neighbors)
                 neighbor = neighbors(i);
-                if neighbor == new_node.parent
+                if ~new_node.isRoot && neighbor == new_node.parent
                     continue;
                 end
                 %want path from from  neighbor to current
@@ -172,7 +178,9 @@ classdef RDTree < handle
             %handle case where we have resampled and are rewiring the
             %resampled point. In this case, the "new" node will have a
             %parent
-            new_node.setParent(best_neighbor, min_cost_btwn, best_path); 
+            if ~new_node.isRoot
+                new_node.setParent(best_neighbor, min_cost_btwn, best_path); 
+            end
            
             %now check if there are any nodes that we can reach with less
             %cost from our new_node
