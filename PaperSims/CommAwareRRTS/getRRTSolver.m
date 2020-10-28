@@ -10,7 +10,7 @@
 function rrt_solver = getRRTSolver()
 
     %stopping criteria
-    solution_not_required = 0; max_iterations = Inf; mins = 3; max_run_time = mins*60;
+    solution_not_required = 0; max_iterations = Inf; mins = 1; max_run_time = mins*60;
     stop_criteria = StopCriteria(solution_not_required, max_iterations, max_run_time);
     %sampler setup
     %1 - uniform random (RRT), 2 - deterministic sequence (RDT) 

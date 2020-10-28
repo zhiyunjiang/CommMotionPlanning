@@ -81,10 +81,12 @@ cc2.simulateSH(); cc2.simulateMP(MP_Mdl);
 cawo = CAWithObservations(cp, cc1, obs_pos, obs_vals);
 cawo_poi = CAWithObservations(cp_poi, cc2, obs_pos_poi, obs_vals_poi);
 
-plotPredictedField(objective, scenario, num_bs, cawo, cawo_poi, qos, p_th, gamma_TH);
 
 %UPLOADING
 scenario = 1;
+
+plotPredictedField(objective, scenario, num_bs, cawo, cawo_poi, qos, p_th, gamma_TH);
+
 cost_fxn = getCostFxnPredicted(objective, scenario, num_bs, cawo, cawo_poi, mp, qos, eps, p_th, gamma_TH);
 problem_instance_OR = PathPlanningProblem(region, res, source, goal, obs_mod, cost_fxn);
 
@@ -115,8 +117,8 @@ if i == 1
     sp_f2_length = GridDist(rrt_path_SP_f2);
 end
 
-% Compare costs to baseline
-%Upload Costs (OR)
+%Compare costs to baseline
+% Upload Costs (OR)
 rrt_OR_true_cost(i) = true_costfxn_OR([],[],rrt_path_OR,1);
 sp_OR_true_cost(i) = true_costfxn_OR([],[],rrt_path_SP_f2,1);
 
@@ -160,11 +162,11 @@ close(gcf);
 fprintf('Iteration %d: created fig3b\n',i);
 
 end
-
+%%
 %compute averages and compare
 fprintf('UPLOAD STATS\n')
-rrt_OR_true_cost_mean = mean(rrt_OR_true_cost(i));
-sp_OR_true_cost_mean = mean(sp_OR_true_cost(i));
+rrt_OR_true_cost_mean = mean(rrt_OR_true_cost);
+sp_OR_true_cost_mean = mean(sp_OR_true_cost);
 OR_true_diff = sp_OR_true_cost_mean - rrt_OR_true_cost_mean;
 fprintf('RRT True: %.2f, SL True: %.2f, Raw Improvement: %.2f, %% Improvement: %.2f\n',...
     rrt_OR_true_cost_mean, sp_OR_true_cost_mean, OR_true_diff , OR_true_diff/sp_OR_true_cost_mean);

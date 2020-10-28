@@ -36,7 +36,7 @@ function [n_PL, K_PL, sh_decorr, sigma_SH, PSD_at_f_c, mp_decorr, lambda, K_ric,
     corr_mp = 0;
     % Note - from measurements, 3.02 is a good value
     sigma_mp = 1;%=0 -> no mp when modeling MP fading as zero-mean, lognormal
-    
+    % sigma_mp = 3.02;
     
     %Comm Region
     x_max = 50;
