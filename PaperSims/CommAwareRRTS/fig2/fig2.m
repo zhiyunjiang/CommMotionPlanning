@@ -191,7 +191,7 @@ rrt_AND_disc_dist_mean = mean(rrt_AND_disc_dist);
 sp_AND_disc_dist_mean = mean(sp_AND_disc_dist);
 rrt_AND_per_disc_mean = mean(rrt_AND_per_disc);
 sp_AND_per_disc_mean = mean(sp_AND_per_disc);
-
+%%
 save(strcat('fig2_ws_',date));
 %%
 function disc_distance = calcDiscDistance(full_cost, dist, eps)

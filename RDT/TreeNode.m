@@ -135,9 +135,15 @@ classdef TreeNode < handle
     methods (Access = private)
         
         function updateDist(this, parent_dist, dist_btwn)
+            if isnan(parent_dist) || parent_dist == Inf || parent_dist < 0 || ...
+               isnan(dist_btwn) || dist_btwn == Inf || dist_btwn < 0
+                error("Distance must be non-negative, finite number. Something went wrong...");
+            end
+            
             if this.distToHere == Inf
                 %we've just connected, we have no children!
-               this.distToHere = parent_dist + dist_btwn; 
+               this.distToHere = parent_dist + dist_btwn;
+            
             else
                 diff = this.distToHere - (parent_dist + dist_btwn);
                 this.propogateDiff(diff);
