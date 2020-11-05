@@ -5,13 +5,12 @@
 % Based on 
 % Y. Mei, Y. Lu, Y. Hu, and C. Lee.  Deployment of mobile robots withenergy
 % and timing constraints.IEEE Transactions on Robotics, 2006.
-%
 
 
 classdef MotionParams < handle
     % Properties (private):
-    % K1 - 
-    % K2 - 
+    % K1 - first motion power constant
+    % K2 - second motion power constant
     % VConst - constant velocity in m/s (we assume constant velocity throughout
     %           trajectory
     % MotionEnergyScalar - Proportionality constant for energy and distance,

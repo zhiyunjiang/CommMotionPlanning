@@ -1,17 +1,8 @@
-%Performance and Unit Test for ChannelAnalyzer
+%Tests for ChannelAnalyzer
 
 %%
 %Setup
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Setup Connectivity Characteristics
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Position of the base station (remote station or transmitter)
-%q_b = [3 5.5];
 q_b = [-450 0];
-% Path loss parameters
-% The resulting path loss component in dB is 
-% gamma_PL_dB = K_PL - 10 * n_PL * log10(d), where d is the distance to the base station.
-% K_PL is the path loss constant in dB and n_PL is the path loss exponent.
 n_PL = 4.2;  
 K_PL = 27;
 
@@ -62,8 +53,8 @@ no_mp = 0;
 ca = ChannelAnalyzer(cc, gamma_TH, no_mp);
 
 %Performance test computing the expected distance
-pathy = zeros([100*res, 1]);
-pathx = cumsum(ones([100*res, 1]));
+pathy = zeros([200, 1]);
+pathx = cumsum(ones([200, 1]))/2;
 
 path = [flip(pathx), pathy];
 %%
@@ -80,17 +71,16 @@ fprintf('Expected Runtime for a 100-point path is %5f\n', exp4_runtime);
 fprintf('Found PMF 4\n');
 approx_CDF_4 = cumsum(approx_PMF_4);
 
-step_size = 1/res;
-figure(5)
+figure()
 clf;
 hold on
-plot(cumsum(distances)*step_size, approx_CDF_4);
+plot(cumsum(distances), approx_CDF_4);
 
 %verify by simulating several channels and calculating expected distance
 %to connectivity
 
 all_dists = ca.simulateFPD(path, 1000, 1);
-histogram(all_dists*step_size, 'Normalization', 'cdf', 'BinEdges',(cumsum(distances))*step_size);
+histogram(all_dists, 'Normalization', 'cdf', 'BinEdges',(cumsum(distances)));
 legend('Markovian Approximation', 'sims');
 
 ylabel('Probability')
@@ -112,17 +102,16 @@ path = [root;pathx, pathy];
 fprintf('Found PMF 4\n');
 approx_CDF_4 = cumsum(approx_PMF_4);
 
-step_size = 1/res;
-figure(6)
+figure()
 clf;
 hold on
-plot(cumsum(distances)*step_size, approx_CDF_4);
+plot(cumsum(distances), approx_CDF_4);
 
 %verify by simulating several channels and calculating expected distance
 %to connectivity
 
 all_dists = ca.simulateFPD(path, 1000, 1);
-histogram(all_dists*step_size, 'Normalization', 'cdf', 'BinEdges',(cumsum(distances))*step_size);
+histogram(all_dists, 'Normalization', 'cdf', 'BinEdges',(cumsum(distances)));
 legend('Markovian Approximation', 'sims');
 
 ylabel('Probability')

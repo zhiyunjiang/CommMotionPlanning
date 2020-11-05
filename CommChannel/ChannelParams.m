@@ -1,19 +1,23 @@
-% all distance and coordaintes are in real terms
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Predicted Channel
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Parameters for the probabilistic modeling of channel gain. Characterizes
+% the path loss, shadowing, and multipath componenets 
+
 classdef ChannelParams
     %ChannelParams - Contains parameters defining the communication channel
     properties
-        qBase;
-        nPL;
-        kPL;
-        sigmaSH;
-        decorrSH;
-        decorrMP;
-        lambda;
-        res;
-        kRic;
-        corrMP
-        psdAtFC
-        sigmaMP;%when modeling shadowing as a zero-mean, log normal distribution
+        qBase;%base station location in [x,y], generally assumed to be meters
+        nPL;% path loss exponent
+        kPL;% path loss constant
+        sigmaSH;% shadowing standard deviation
+        decorrSH;% shadowing decorrelation distance. Referred to beta in some papers
+        decorrMP;% multipath decorrelation distance.
+        lambda;% wavelength
+        kRic;%  if modeling multipath as rician, kRic parameterizes the distribution
+        corrMP% if corrMP = 1, treating multipath affects as correlated. Else treat as uncorrelated
+        psdAtFC%
+        sigmaMP;%if modeling shadowing as a zero-mean, log normal distribution (uncorrelated)
     end
     
     methods
@@ -26,7 +30,10 @@ classdef ChannelParams
             % The resulting path loss component in dB is 
             % gamma_PL_dB = K_PL - 10 * n_PL * log10(d), where d is the distance to the base station.
             % K_PL is the path loss constant in dB and n_PL is the path loss exponent.
-            this.nPL = n_PL;  
+            this.nPL = n_PL;
+            if this.nPL<0
+                warning('Path loss exponent less than 0, which is unusual');
+            end
             this.kPL = K_PL;
 
 
@@ -62,8 +69,7 @@ classdef ChannelParams
             this.sigmaMP = sigma_mp;
             
             this.psdAtFC = PSD_at_f_c;
-        end
-        
+        end 
     end
 end
 

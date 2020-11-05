@@ -1,3 +1,9 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% ChannelAnalyzer
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Calculates firts passage distance related values for path through a given
+% channel
+
 classdef ChannelAnalyzer < handle
     
     properties
@@ -9,7 +15,6 @@ classdef ChannelAnalyzer < handle
         riceCDFLUT;%Rician dist look up table
         LUTRes = 1000; % the number of entries to build out in the LUT
         LUTMax;
-        scaledDecorrSH;
         
         %from arjun_python/fpd_with_mp.py
         g;
@@ -21,9 +26,8 @@ classdef ChannelAnalyzer < handle
     methods
         function this = ChannelAnalyzer(comm_channel, gamma_TH, no_mp)
            this.commChannel = comm_channel;
-           this.channelParams = comm_channel.channelParams;
+           this.channelParams = comm_channel.cp;
            this.gammaTH = gamma_TH;
-           this.scaledDecorrSH = this.channelParams.decorrSH*this.commChannel.res;
            
            if nargin == 2
                no_mp = 0;
@@ -43,12 +47,6 @@ classdef ChannelAnalyzer < handle
            vec = 0:this.g-1;
            %sampling values of gammaSH
            this.gammaSHVec = -this.u + this.delU*vec;
-        end
-        
-        function req_power = getReqTXPower(this, receiver_noise, R, K)
-            channel_power_dBm = this.commChannel.getGammaTOTdB();
-            CNR_lin = 10.^(channel_power_dBm/10) / receiver_noise;
-            req_power = ((2^R - 1)/K)*(1./CNR_lin);
         end
         
         function fpd_dists = simulateFPD(this, path, n_sims, is_markov)
@@ -75,7 +73,7 @@ classdef ChannelAnalyzer < handle
                end
                
                sims_run = sims_run + 1;
-               if mod(sims_run, 50) == 0
+               if mod(sims_run, 100) == 0
                   fprintf('%d simulations complete\n', sims_run); 
                end
                fpd_dists(sims_run) = current_dist;
@@ -88,7 +86,7 @@ classdef ChannelAnalyzer < handle
                epsilon = 0; 
             end
             
-           gamma_gap = this.gammaTH - this.commChannel.getGammaPLdBAtPoint(point) - epsilon;
+           gamma_gap = this.gammaTH - this.commChannel.getGammaPLdBAtPt(point) - epsilon;
            if this.noMP
                %then we're just dealing with path loss and shadowing. Check
                %probability that pathloss + shadowing < threshold ->
@@ -109,7 +107,7 @@ classdef ChannelAnalyzer < handle
             end
             
             if this.noMP
-                no_conn_to_here = NoConnectionOnPathNoMP(this, path, method);
+                no_conn_to_here = this.NoConnectionOnPathNoMP(path, method);
             else
                %TODO - what should this look like for paths of arbitrary
                %shape?
@@ -232,19 +230,19 @@ classdef ChannelAnalyzer < handle
         function J_0 = J0(this, root)
             %Approximate integral from -Inf to Inf  of P(gamma_PL + gamma_SH + gamma_MP < gamma_TH)
             %using recursive J formulation as in Arjun's paper
-            gamma_pl_root = this.commChannel.getGammaPLdBAtPoint(root);
+            gamma_pl_root = this.commChannel.getGammaPLdBAtPt(root);
             J_0 = normpdf(this.gammaSHVec, 0, this.channelParams.sigmaSH)...
                 .*this.mpCDF(this.gammaTH - gamma_pl_root - this.gammaSHVec);
         end
         
         function J_next = ItterativeJNextFromPoint(this, J_prev, point, step_size)
-            gamma_pl = this.commChannel.getGammaPLdBAtPoint(point);
+            gamma_pl = this.commChannel.getGammaPLdBAtPt(point);
            J_next = this.ItterativeJNext(J_prev, gamma_pl, step_size); 
         end
         
         function J_next = ItterativeJNext(this, J_prev, gamma_pl, step_size)
             cp = this.channelParams;
-            rho = exp(-step_size/this.scaledDecorrSH);
+            rho = exp(-step_size/this.channelParams.decorrSH);
             sig = sqrt(cp.sigmaSH^2 *(1 - rho^2));
             phi = normpdf(this.gammaSHVec, 0, sig);
             G = this.g;
@@ -295,7 +293,7 @@ classdef ChannelAnalyzer < handle
             
             %handle the case of a path consisting of single point
             if min(size(path)) == 1
-                gamma_gap = this.gammaTH - this.commChannel.getGammaPLdBAtPoint(path(1,:)); 
+                gamma_gap = this.gammaTH - this.commChannel.getGammaPLdBAtPt(path(1,:)); 
                 no_conn_to_here = normcdf(gamma_gap, 0, this.channelParams.sigmaSH );
             elseif method <= 2
                 %methods that try to calculate using the joint pdf of the
@@ -319,10 +317,10 @@ classdef ChannelAnalyzer < handle
                 path_cov = diag(pwr_sh*ones([path_dim, 1]));
 
                 for i = 1:path_dim
-                   gamma_gap(i) = this.gammaTH - this.commChannel.getGammaPLdBAtPoint(path(i,:)); 
+                   gamma_gap(i) = this.gammaTH - this.commChannel.getGammaPLdBAtPt(path(i,:)); 
                    for j = i+1:path_dim
                       cov_entry =  pwr_sh * exp(-norm(path(i,:) - path(j,:)) /...
-                                            (this.scaledDecorrSH));
+                                            (this.channelParams.decorrSH));
                       path_cov(i,j) = cov_entry;
                       path_cov(j,i) = cov_entry;
                    end
@@ -364,7 +362,7 @@ classdef ChannelAnalyzer < handle
             
             J_prev = J_0;
             for i = 2:path_dim
-                gamma_pl = this.commChannel.getGammaPLdBAtPoint(path(i,:));
+                gamma_pl = this.commChannel.getGammaPLdBAtPt(path(i,:));
                 d(i) = norm(path(i-1,:) - path(i,:));
                 J_prev = this.ItterativeJNext(J_prev, gamma_pl, d(i));
                 p_no_conn_to_here(i) = this.IntegrateJ(J_prev);
@@ -416,9 +414,10 @@ classdef ChannelAnalyzer < handle
         
         function p_v = psiVolterraUp(this, root, current_point, prev_point, epsilon)
             cc = this.commChannel; cp = this.channelParams;
+            beta = this.channelParams.decorrSH;
             
-            m_r = cc.getGammaPLdBAtPoint(root);
-            m_d = cc.getGammaPLdBAtPoint(current_point);
+            m_r = cc.getGammaPLdBAtPt(root);
+            m_d = cc.getGammaPLdBAtPt(current_point);
             d2r = norm(root - current_point);
             
             g_th = this.gammaTH;
@@ -429,8 +428,8 @@ classdef ChannelAnalyzer < handle
             
             
             f1 = normpdf(g_th - m_r - epsilon, 0, sigma_sh);
-            m_cond = m_d + exp(-d2r/this.scaledDecorrSH)*(g_th - epsilon - m_r);
-            var_cond = pwr_sh*(1 - exp(-2*d2r/this.scaledDecorrSH));
+            m_cond = m_d + exp(-d2r/beta)*(g_th - epsilon - m_r);
+            var_cond = pwr_sh*(1 - exp(-2*d2r/beta));
             if var_cond == 0
                 f2 = 0;
             else
@@ -438,11 +437,11 @@ classdef ChannelAnalyzer < handle
             end
             f3 = normpdf(g_th - m_d, 0, cp.sigmaSH);
             
-            ups = (g_th - epsilon - m_r - exp(-d2r/this.scaledDecorrSH)*(g_th - m_d))/...
-                sqrt(2*pwr_sh*(1 - exp(-2*d2r/this.scaledDecorrSH)));
+            ups = (g_th - epsilon - m_r - exp(-d2r/beta)*(g_th - m_d))/...
+                sqrt(2*pwr_sh*(1 - exp(-2*d2r/beta)));
             
-            p_v = ( 1/(2*p_no_conn_at_root) )*( (-2*pwr_sh/this.scaledDecorrSH)*exp(-d2r/this.scaledDecorrSH)*f1*f2...
-            + 0.5*f3*(1+erf(ups))* (-m_prime - (g_th - m_d)/this.scaledDecorrSH));
+            p_v = ( 1/(2*p_no_conn_at_root) )*( (-2*pwr_sh/beta)*exp(-d2r/beta)*f1*f2...
+            + 0.5*f3*(1+erf(ups))* (-m_prime - (g_th - m_d)/beta));
             
             %dinardo = this.psiVolterraUpdiNardo(root, current_point, prev_point, epsilon);
             %p_v = dinardo;
@@ -458,15 +457,16 @@ classdef ChannelAnalyzer < handle
            h1p_d = this.h1CovPrime(d);
            h2p_d = this.h2CovPrime(d);
            S = this.gammaTH;
+           beta = this.channelParams.decorrSH;
            
-           m_r = cc.getGammaPLdBAtPoint(root);
-           m_d = cc.getGammaPLdBAtPoint(current_point);
+           m_r = cc.getGammaPLdBAtPt(root);
+           m_d = cc.getGammaPLdBAtPt(current_point);
            
            sigma_sh = this.channelParams.sigmaSH;
            pwr_sh = sigma_sh^2;
            m_prime = this.plPrime( current_point, prev_point);
-           m_cond = m_d + exp(-d/this.scaledDecorrSH)*(S - epsilon - m_r);
-           var_cond = pwr_sh*(1 - exp(-2*d/this.scaledDecorrSH));
+           m_cond = m_d + exp(-d/beta)*(S - epsilon - m_r);
+           var_cond = pwr_sh*(1 - exp(-2*d/beta));
            
            
            erf_arg = (S-epsilon - m_r)/sqrt(2*h1_r*h2_r);
@@ -484,8 +484,8 @@ classdef ChannelAnalyzer < handle
             %current "distance" is just distance from previous to current
             d = norm(prev_point - current_point);
 
-            m_d = cc.getGammaPLdBAtPoint(current_point);
-            m_l = cc.getGammaPLdBAtPoint(prev_point);
+            m_d = cc.getGammaPLdBAtPt(current_point);
+            m_l = cc.getGammaPLdBAtPt(prev_point);
             
             m_prime = this.plPrime( current_point, prev_point);
             S = this.gammaTH; S_prime = 0;
@@ -509,7 +509,7 @@ classdef ChannelAnalyzer < handle
         function m_prime = plPrime(this, current_point, prev_point)
             cp = this.channelParams;
             qb = (cp.qBase - ...
-                [this.commChannel.region(2), this.commChannel.region(4)])*this.commChannel.res;
+                [this.commChannel.region(2), this.commChannel.region(4)]);
             d2b = norm(current_point - qb); 
             
             v1 = qb - prev_point; v2 = qb - current_point - prev_point;
@@ -519,20 +519,20 @@ classdef ChannelAnalyzer < handle
         
         function h1_cov = h1Cov(this, d)
             cp = this.channelParams;
-            h1_cov = cp.sigmaSH*exp(d/this.scaledDecorrSH);
+            h1_cov = cp.sigmaSH*exp(d/cp.decorrSH);
         end
         
         function h1_cov_prime = h1CovPrime(this, d)
-            h1_cov_prime = this.h1Cov(d)/this.scaledDecorrSH;
+            h1_cov_prime = this.h1Cov(d)/cp.decorrSH;
         end
         
         function h2_cov = h2Cov(this, d)
             cp = this.channelParams;
-            h2_cov = cp.sigmaSH*exp(-d/this.scaledDecorrSH);
+            h2_cov = cp.sigmaSH*exp(-d/cp.decorrSH);
         end
         
         function h2_cov_prime = h2CovPrime(this, d)
-            h2_cov_prime = -this.h2Cov(d)/this.scaledDecorrSH;
+            h2_cov_prime = -this.h2Cov(d)/cp.decorrSH;
         end
         
         function cp = mpCDF(this, x)
@@ -542,10 +542,8 @@ classdef ChannelAnalyzer < handle
                %actually need to implement Rician CDF here
                %convert from dB to linear for rician
                %appeared to be working when dividing by 20, as Arjun does
-               %in Python script, but based on simulation, should be
-               %dividing by 10
-               x_lin = 10.^(x/10);
-               %cp = this.ricDist.cdf(x_lin);
+               %in Python script
+               x_lin = 10.^(x/20);
                
                %find closest entry in LUT
                x_lut_index = max(min(round(x_lin/(this.LUTMax/this.LUTRes)), this.LUTRes), 0) + 1;

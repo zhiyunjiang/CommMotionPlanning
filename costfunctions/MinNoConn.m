@@ -22,7 +22,7 @@ function total_cost = MinNoConn(path, cc, gamma_th_dBm, eps)
     %for fixed transmit power, fully observable channel
     total_cost = 0;
     for i=2:length(path)
-        no_conn = ( cc.getGammaTOTdBAtPoint(path(i-1,:)) < gamma_th_dBm) ;
+        no_conn = ( cc.getGammaTOTdBAtPt(path(i-1,:)) < gamma_th_dBm) ;
         dist = norm(path(i-1,:) - path(i,:));
         total_cost = total_cost + dist*(eps + no_conn);
     end
