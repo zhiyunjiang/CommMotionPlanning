@@ -9,12 +9,12 @@ function total_cost = LITotalEnergy(path, cc, qos, mp, delta)
         delta = 1;
     end
     
-    v_const = mp.VConst; dist_scale = 1/cc.res;
+    v_const = mp.VConst;
 
     total_cost = 0;
     req_comm_power_a = qos.reqTXPower(cc.getGammaTOTdBAtPt(path(1,:)));
     for i=2:length(path)
-        dist = dist_scale*norm(path(i-1,:) - path(i,:));
+        dist = norm(path(i-1,:) - path(i,:));
         
         req_comm_power_b = qos.reqTXPower(cc.getGammaTOTdBAtPt(path(i,:)));
         comm_energy = (dist/v_const)*(req_comm_power_a + req_comm_power_b)/2;

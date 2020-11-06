@@ -21,12 +21,12 @@ function energy_J = LIExpectedTotalEnergy(path, cawo, qos, mp, delta)
        delta = 1; 
     end
     
-    v_const = mp.VConst; dist_scale = 1/cawo.cc.res;
+    v_const = mp.VConst;
     
     energy_J = 0;
     req_comm_power_a = qos.reqTXPower(cawo.posteriorExpecteddB(path(1,:)));
     for i=2:length(path)
-        dist = dist_scale*norm(path(i-1,:) - path(i,:));%convert distance to meters
+        dist = norm(path(i-1,:) - path(i,:));
         req_comm_power_b = qos.reqTXPower(cawo.posteriorExpecteddB(path(i,:)));
 
         comm_energy = (dist/v_const)*(req_comm_power_a + req_comm_power_b)/2;

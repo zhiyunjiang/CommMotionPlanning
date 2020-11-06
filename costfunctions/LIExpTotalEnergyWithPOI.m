@@ -23,14 +23,14 @@
 % double energy_J - approximate energy consumed over path in Joules
 
 function energy_J = LIExpTotalEnergyWithPOI(path, cawo, cawo_poi, qos, mp, scenario, delta)
-    v_const = mp.VConst; dist_scale = 1/cawo.cc.res;
+    v_const = mp.VConst; 
     
     energy_J = 0;
     bs_req_comm_power_a = qos.reqTXPower(cawo.getMeanAtGridPoint(path(1,:)));
     poi_req_comm_power_a = qos.reqTXPower(cawo_poi.getMeanAtGridPoint(path(1,:)));
     
     for i=2:length(path)
-        dist = dist_scale*norm(path(i-1,:) - path(i,:));%convert distance to meters
+        dist = norm(path(i-1,:) - path(i,:));
         
         bs_req_comm_power_b = qos.reqTXPower(cawo.getMeanAtGridPoint(path(i,:)));
         poi_req_comm_power_b = qos.reqTXPower(cawo_poi.getMeanAtGridPoint(path(i,:)));
