@@ -1,5 +1,3 @@
-%Tests for ChannelAnalyzer
-
 %%
 %Setup
 q_b = [-450 0];
@@ -64,24 +62,26 @@ path = [flip(pathx), pathy];
 fprintf('Test Performance of Recursive Markovian Approximation of Expected FPD\n');
 exp4 = @() ca.ExpectedFPD(path,4); 
 exp4_runtime = timeit(exp4);
-fprintf('Expected Runtime for a 100-point path is %5f\n', exp4_runtime);
+fprintf('Expected Runtime for a 200-point path is %5f\n', exp4_runtime);
 %%
 %verify we accurately calculate straighline-path expected FPD
-[approx_PMF_4, distances] = ca.ApproxFPDPMF(path,4);
-fprintf('Found PMF 4\n');
-approx_CDF_4 = cumsum(approx_PMF_4);
-
+[approx_PMF_1, distances_1] = ca.ApproxFPDPMF(path,1);
+[approx_PMF_2, distances_2] = ca.ApproxFPDPMF(path,2);
+fprintf('Found PMFs\n');
+approx_CDF_1 = cumsum(approx_PMF_1);
+approx_CDF_2 = cumsum(approx_PMF_2);
+%%
 figure()
 clf;
 hold on
-plot(cumsum(distances), approx_CDF_4);
-
+plot(cumsum(distances_1), approx_CDF_1);
+plot(cumsum(distances_2), approx_CDF_2);
 %verify by simulating several channels and calculating expected distance
 %to connectivity
 
-all_dists = ca.simulateFPD(path, 1000, 1);
-histogram(all_dists, 'Normalization', 'cdf', 'BinEdges',(cumsum(distances)));
-legend('Markovian Approximation', 'sims');
+all_dists = ca.simulateFPD(path, 100, 0);
+histogram(all_dists, 'Normalization', 'cdf', 'BinEdges',(cumsum(distances_1)));
+legend( 'Arjun full', 'Arjun no mp' , 'sims');
 
 ylabel('Probability')
 xlabel('Distance (m)')
@@ -91,27 +91,29 @@ title('FPD CDF for Straight Line Path')
 %Testing with non-straighline paths
 
 root = [100, 1];
-deltax = ones([99, 1]);%deltax(1:2:end) = 0;
-deltay = zeros([99, 1]);deltay(2:3:end) = 1;
-pathx = 150 - cumsum(deltax);
+deltax = ones([99, 1]);deltax(2:2:end) = 0;
+deltay = zeros([99, 1]);deltay(2:2:end) = 1;
+pathx = 100 - cumsum(deltax);
 pathy = 1 + cumsum(deltay);
 path = [root;pathx, pathy];
 
-%verify we accurately calculate straighline-path expected FPD
-[approx_PMF_4, distances] = ca.ApproxFPDPMF(path,4);
-fprintf('Found PMF 4\n');
-approx_CDF_4 = cumsum(approx_PMF_4);
+[approx_PMF_1, distances_1] = ca.ApproxFPDPMF(path,1);
+[approx_PMF_2, distances_2] = ca.ApproxFPDPMF(path,2);
+fprintf('Found PMFs\n');
+approx_CDF_1 = cumsum(approx_PMF_1);
+approx_CDF_2 = cumsum(approx_PMF_2);
 
 figure()
 clf;
 hold on
-plot(cumsum(distances), approx_CDF_4);
+plot(cumsum(distances_1), approx_CDF_1);
+plot(cumsum(distances_2), approx_CDF_2);
 
 %verify by simulating several channels and calculating expected distance
 %to connectivity
 
-all_dists = ca.simulateFPD(path, 1000, 1);
-histogram(all_dists, 'Normalization', 'cdf', 'BinEdges',(cumsum(distances)));
+all_dists = ca.simulateFPD(path, 20, 0);
+histogram(all_dists, 'Normalization', 'cdf', 'BinEdges',(cumsum(distances_1)));
 legend('Markovian Approximation', 'sims');
 
 ylabel('Probability')

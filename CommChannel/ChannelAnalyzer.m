@@ -3,7 +3,12 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Calculates firts passage distance related values for path through a given
 % channel
-
+%
+% Methods
+% 1 - full implementation of Arjun's proposed iterative algorithm for
+%       calculating FPD - HANDLES MULTIPATH
+% 2 - Iterative calculation akin to Arjun's implementation, based on Di
+%       Nardo's paper - does not account for multipath
 classdef ChannelAnalyzer < handle
     
     properties
@@ -49,6 +54,23 @@ classdef ChannelAnalyzer < handle
            this.gammaSHVec = -this.u + this.delU*vec;
         end
         
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % simulateFPD
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Calculates the first passage distance along a path for several
+        % realizations of a comm channel
+        % Input:
+        % this - reference to the ChannelAnalyzer object
+        % path - nX2 matrix with each row representing a waypoint along the
+        %           path
+        % n_sims - the number of times to simulate the channel
+        % is_markov - if true, treat the channel along the path as
+        %               Markovian. This allows for faster simulation, but 
+        %               is a poorer model of reality
+        %
+        % Output:
+        % fpd_dists - vector of n_sims distances, the first passage distance
+        %               for each simulation
         function fpd_dists = simulateFPD(this, path, n_sims, is_markov)
             cc = this.commChannel;
             sims_run = 0;
@@ -73,118 +95,137 @@ classdef ChannelAnalyzer < handle
                end
                
                sims_run = sims_run + 1;
-               if mod(sims_run, 100) == 0
+               if mod(sims_run, 20) == 0
                   fprintf('%d simulations complete\n', sims_run); 
                end
                fpd_dists(sims_run) = current_dist;
             end
         end
         
-        function prior = NoConnectionPrior(this, point, epsilon)
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % NoConnectionPrior
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Find the marginal pronability of no connection at a point
+        % Input:
+        % this - reference to the ChannelAnalyzer object
+        % pt - x,y point of interest
+        % epsilon - arbitrarily small value used in theoretical derivation
+        %
+        % Output:
+        % fpd_dists - vector of n_sims distances, the first passage distance
+        %               for each simulation
+        function marginal = NoConnectionMarginal(this, pt, epsilon)
             
             if nargin == 2
                epsilon = 0; 
             end
             
-           gamma_gap = this.gammaTH - this.commChannel.getGammaPLdBAtPt(point) - epsilon;
+           gamma_gap = this.gammaTH - this.commChannel.getGammaPLdBAtPt(pt) - epsilon;
            if this.noMP
                %then we're just dealing with path loss and shadowing. Check
                %probability that pathloss + shadowing < threshold ->
                %gamma_SH ~ N(0, sigma_SH)
-               prior = normcdf(gamma_gap,0, this.channelParams.sigmaSH );
+               marginal = normcdf(gamma_gap,0, this.channelParams.sigmaSH );
            else
                %now looking at the probabiltiy that gamma_SH + gamma_MP <
                %gamma_TH - gamma_PL. Will compute with fast fourier
                %transform, similar to Arjun's paper
-               J0 = this.J0(point);
-               prior = this.IntegrateJ(J0);
+               J0 = this.J0(pt);
+               marginal = this.IntegrateJ(J0);
            end
         end
         
-        function no_conn_to_here = NoConnectionOnPath(this, path, method)
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % NoConnectionOnPath
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Find the probability that connection never established while
+        % traversing the path.
+        % Input:
+        % this - reference to the ChannelAnalyzer object
+        % path - the path being analyzed
+        % method - 1: Arjun's iterative approximation using FFT,
+        %          2: Iterative Arjun's w/o multipath
+        %
+        % Output:
+        % no_conn - probability of no connection to along the path
+        function no_conn = NoConnectionOnPath(this, path, method)
+            if nargin == 2
+                method = 1;
+            end
+
+            [approx_PMF, d] = ApproxFPDPMF(this, path, method);
+            no_conn = approx_PMF'*d;
+        end
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % ExpectedFPD
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Calculates the first passage distance
+        % Input:
+        % this - reference to the ChannelAnalyzer object
+        % path - the path being analyzed
+        % method - 1: Arjun's iterative approximation using FFT,
+        %          2: Iterative Arjun's w/o multipath
+        %
+        % Output:
+        % exp_dist - Expected first passage distance
+        function exp_dist = ExpectedFPD(this, path, method)
+            if nargin == 2
+                method = 1;
+            end
+           [approx_PMF, distances] = ApproxFPDPMF(this, path, method);
+           exp_dist = approx_PMF'*distances;
+        end
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % ApproxFPDPMF
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Calculate the discretized PDF (i.e. PMF) of first pasage distance
+        % Input:
+        % this - reference to the ChannelAnalyzer object
+        % path - the path being analyzed
+        % method - 1: Arjun's iterative approximation using FFT,
+        %          2: Iterative Arjun's w/o multipath
+        %
+        % Output:
+        % approx_PMF - Probability mass at each distance
+        % distances - distance associated with each probability mass in
+        %               approx_PMF. First value is always 0.
+        function [approx_PMF, distances] = ApproxFPDPMF(this, path, method)
             if nargin == 2
                 method = 1;
             end
             
-            if this.noMP
-                no_conn_to_here = this.NoConnectionOnPathNoMP(path, method);
-            else
-               %TODO - what should this look like for paths of arbitrary
-               %shape?
-               no_conn_to_here = 1;
-            end
-        end
-        
-        function exp_dist = ExpectedFPD(this, path, method)
-           %can be implemented more efficiently, but will leave as this for now
-           %expectation is conditional expectation, conditioned on no
-           %connection at initial location (up-crossing first passage distance)
-           if method <= 2
-               %Multivariate-Gaussian base approach
-               exp_dist = 0;
-
-               path_dim = length(path);
-
-               %handle the case of a path consisting of single point
-               if min(size(path)) == 1
-                    path_dim = 1;
-               end
-
-               no_conn_at_root = this.NoConnectionPrior(path(1,:));
-
-               for i = 1:path_dim-1
-                   current_dist = norm(path(i,:) - path(i+1,:));
-
-                   p_no_conn_cond = this.NoConnectionOnPath(path(1:i,:), method)/no_conn_at_root;
-
-                   exp_dist = p_no_conn_cond*current_dist + exp_dist;
-               end
-           elseif method == 3
-               [g_pdf, d] = this.FPDPDFStraightlineNoMP(path);
-               exp_dist = (g_pdf.*d)'*cumsum(d);
-           elseif method ==4
-               [p_no_conn, d] = this.NoConnAlongSL(path);
-               exp_dist = p_no_conn'*d;
-           end
-        end
-        
-        function [approx_PMF, distances] = ApproxFPDPMF(this, path, method)
-            path_dim = length(path);
-            
-           %handle the case of a path consisting of single point
-           if min(size(path)) == 1
-                path_dim = 1;
-           end
-           if method <= 2
-           %methods based on joint pdf, use mvncdf of various
-           %implementations
-               no_conn_at_root = this.NoConnectionPrior(path(1,:));
-               approx_PMF = zeros([path_dim, 1]);
-               distances = zeros([path_dim, 1]);
-               p_no_conn_prev = 1;
-
-               for i = 2:path_dim
-                   distances(i) = norm(path(i-1,:) - path(i,:));
-                    p_no_conn_cond = this.NoConnectionOnPath(path(1:i,:), method)/no_conn_at_root;
-                   approx_PMF(i) = p_no_conn_prev - p_no_conn_cond;
-                   p_no_conn_prev = p_no_conn_cond;
-               end
-           elseif method == 3
-               [g_pdf, distances] = this.FPDPDFStraightlineNoMP(path);
-               %approx_PMF = g_pdf.*distances;
-               %use Simpsons to calculate p(connection) between each step
-               %(a discrete probability mass)
-               approx_PMF = zeros(size(g_pdf));
-               approx_PMF(2) = IntegrateWSimpsonsIrregular(g_pdf(1:2), distances(2));
-               for i = 3:length(g_pdf)
-                   approx_PMF(i) = IntegrateWSimpsonsIrregular(g_pdf(i-2:i), distances(i-1:i)) - approx_PMF(i-1);
-               end
-               
-           elseif method == 4
+           if method == 1
                [approx_PMF, distances] = this.FPDPMFStraightline(path);
+           else
+               [approx_PMF, distances] = this.FPDPDFStraightlineNoMP(path);
            end
         end
         
+        
+        function plot_priors(this)
+           cc = this.commChannel;
+           gamma_gap = this.gammaTH - cc.getGammaPLdB(); 
+           p_conn = 1 - normcdf(gamma_gap,0, this.channelParams.sigmaSH);
+           [gx, gy] = cc.getMeshGrid();
+           surf(gx, gy, p_conn, 'EdgeColor','none');
+           
+            % light
+            % shading interp
+            fnt_siz = 16;
+            xlabel('x (m)', 'FontSize', fnt_siz,  'FontWeight', 'bold');
+            ylabel('y (m)', 'FontSize', fnt_siz,  'FontWeight', 'bold');
+            zlabel('P(connection)','FontSize', fnt_siz ,  'FontWeight','bold');
+            axis tight
+            grid on
+            set(gca, 'FontSize', fnt_siz, 'FontWeight', 'bold');
+        end
+        
+    end
+    
+    methods (Access = private)
         function [g_aug, d_aug] = IterativeFPDPDFSLNoMP(this, g, d, root, prevs, current, epsilon)
             n = length(d);
             
@@ -260,92 +301,9 @@ classdef ChannelAnalyzer < handle
                 .*this.mpCDF(this.gammaTH - gamma_pl - this.gammaSHVec);
         end
         
-        function p_no_conn_to_here = IntegrateJ(this, J)
+        function result = IntegrateJ(this, J)
             %estimate integral using Riemann sum
-            p_no_conn_to_here = sum(J)*this.delU;
-        end
-        
-        function plot_priors(this)
-           cc = this.commChannel;
-           gamma_gap = this.gammaTH - cc.getGammaPLdB(); 
-           p_conn = 1 - normcdf(gamma_gap,0, this.channelParams.sigmaSH);
-           [gx, gy] = cc.getMeshGrid();
-           surf(gx, gy, p_conn, 'EdgeColor','none');
-           
-            % light
-            % shading interp
-            fnt_siz = 16;
-            xlabel('x (m)', 'FontSize', fnt_siz,  'FontWeight', 'bold');
-            ylabel('y (m)', 'FontSize', fnt_siz,  'FontWeight', 'bold');
-            zlabel('P(connection)','FontSize', fnt_siz ,  'FontWeight','bold');
-            axis tight
-            grid on
-            set(gca, 'FontSize', fnt_siz, 'FontWeight', 'bold');
-        end
-        
-    end
-    
-    methods (Access = private)
-        function no_conn_to_here = NoConnectionOnPathNoMP(this, path, method)
-            if nargin == 2
-                method = 1;
-            end
-            
-            %handle the case of a path consisting of single point
-            if min(size(path)) == 1
-                gamma_gap = this.gammaTH - this.commChannel.getGammaPLdBAtPt(path(1,:)); 
-                no_conn_to_here = normcdf(gamma_gap, 0, this.channelParams.sigmaSH );
-            elseif method <= 2
-                %methods that try to calculate using the joint pdf of the
-                %jointly gaussian RV's
-                
-                %matlab's multivariate normal CDF (mvncdf) can only handle 25
-                %dimensions to only take the 25 most recent path spots. Eventually,
-                %I'll want a better way to handle this
-                %Don't need to do this with botev!
-                
-                path_dim = length(path);
-                if path_dim > 25 && method == 2
-                   path = path(path_dim - 24:path_dim,:);
-                   path_dim = 25; 
-                end
-
-                gamma_gap = zeros([ path_dim, 1]);
-
-                %build the covariance matrix
-                pwr_sh = this.channelParams.sigmaSH^2;
-                path_cov = diag(pwr_sh*ones([path_dim, 1]));
-
-                for i = 1:path_dim
-                   gamma_gap(i) = this.gammaTH - this.commChannel.getGammaPLdBAtPt(path(i,:)); 
-                   for j = i+1:path_dim
-                      cov_entry =  pwr_sh * exp(-norm(path(i,:) - path(j,:)) /...
-                                            (this.channelParams.decorrSH));
-                      path_cov(i,j) = cov_entry;
-                      path_cov(j,i) = cov_entry;
-                   end
-                end
-                if method == 1
-                    %using Botev's improved mvncf
-                    lower = -Inf*ones([path_dim,1]);
-                    n_samples = path_dim*(5*10^4);
-                    est = mvncdfBotev(lower, gamma_gap, path_cov, n_samples);
-                    no_conn_to_here = est.prob;
-                elseif method == 2
-                    %use matlab's mvncdf, truncate path to 25 most recent
-                    no_conn_to_here = mvncdf(gamma_gap, [], path_cov);
-                end
-            elseif method == 3
-                [g_pdf, d] = this.FPDPDFStraightlineNoMP(path);
-                %TODO - use Simpsons method, also make this more efficient
-                g_cdf = cumsum(g_pdf.*d);
-                no_conn_to_here = 1 - g_cdf(end);
-            elseif method == 4
-                [g_pdf, d] = this.FPDPMFStraightline(path);
-                %TODO - use Simpsons method, also make this more efficient
-                g_cdf = cumsum(g_pdf.*d);
-                no_conn_to_here = 1 - g_cdf(end);
-            end
+            result = sum(J)*this.delU;
         end
         
         function [p_no_conn_to_here, d] = NoConnAlongSL(this, path)
@@ -356,7 +314,7 @@ classdef ChannelAnalyzer < handle
             p_no_conn_to_here = zeros([path_dim, 1]);
             d = zeros([path_dim, 1]);
             J_0 = this.J0(path(1,:));
-            %estimate integral using Riemann sum
+
             p_no_conn_to_here(1) = this.IntegrateJ(J_0);
             d(1) = 0;
             
@@ -422,7 +380,7 @@ classdef ChannelAnalyzer < handle
             
             g_th = this.gammaTH;
             m_prime = this.plPrime( current_point, prev_point);
-            p_no_conn_at_root = this.NoConnectionPrior(root, epsilon);
+            p_no_conn_at_root = this.NoConnectionMarginal(root, epsilon);
             sigma_sh = cp.sigmaSH;
             pwr_sh = sigma_sh^2;
             
@@ -523,6 +481,7 @@ classdef ChannelAnalyzer < handle
         end
         
         function h1_cov_prime = h1CovPrime(this, d)
+            cp = this.channelParams;
             h1_cov_prime = this.h1Cov(d)/cp.decorrSH;
         end
         
@@ -532,6 +491,7 @@ classdef ChannelAnalyzer < handle
         end
         
         function h2_cov_prime = h2CovPrime(this, d)
+            cp = this.channelParams;
             h2_cov_prime = -this.h2Cov(d)/cp.decorrSH;
         end
         
@@ -539,10 +499,6 @@ classdef ChannelAnalyzer < handle
            if this.noMP
                cp = (x>=0);
            else
-               %actually need to implement Rician CDF here
-               %convert from dB to linear for rician
-               %appeared to be working when dividing by 20, as Arjun does
-               %in Python script
                x_lin = 10.^(x/20);
                
                %find closest entry in LUT
@@ -559,6 +515,13 @@ classdef ChannelAnalyzer < handle
             x = 0:this.LUTMax/this.LUTRes:this.LUTMax;
             
             this.riceCDFLUT = this.ricDist.cdf(x);
+        end
+        
+        function path_dim = getPathDim(this, path)
+            path_dim = length(path);
+            if min(size(path)) == 1
+                path_dim = 1;
+            end 
         end
         
     end

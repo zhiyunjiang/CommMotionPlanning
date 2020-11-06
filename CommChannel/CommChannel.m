@@ -247,8 +247,25 @@ classdef CommChannel < handle
             connection_field = double((gamma >= gamma_th));
         end
         
-        %INCOMPLETE
-        %assume path in raw coordinates
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % simulatePath
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Calculate the channel power along a path with a new realization
+        % of the channel
+        %
+        % Input:
+        % this - reference to the CommChannel object
+        % path - nX2 matrix with each row representing a waypoint along the
+        %           path
+        % no_mp - if set to 
+        % is_markov - if true, treat the channel along the path as
+        %               Markovian. This allows for faster simulation, but 
+        %               is a poorer model of reality
+        %
+        % Output:
+        % gamma - n-dimensional vector with the channel power at each point
+        %           along the path.
         function gamma = simulatePath(this, path, no_mp, is_markov)
            path_dim = length(path);
            
@@ -261,15 +278,19 @@ classdef CommChannel < handle
            
            gamma = zeros([path_dim, 1]);
            if ~is_markov
-              this.simulateMP();
+               if ~no_mp
+                   this.simulateMP();
+               else
+                    this.gammaMPdB = 0;
+               end
+              
               this.simulateSH();
-              gamma_TOT = this.getGammaTOTdB();
               gamma(1) = this.getGammaTOTdBAtPt(path(1,:));
-           else
+           else%markovian setup
                gamma_mps = this.simMP(no_mp, path_dim);
                z_shs = sigmaSH*randn([path_dim, 1]);
                gamma_shs = zeros([path_dim,1]);
-               gamma_pl_prev = this.getGammaTOTdBAtPt(path(1,:));
+               gamma_pl_prev = this.getGammaPLdBAtPt(path(1,:));
                gamma_shs(1) = z_shs(1);
                gamma(1) = gamma_pl_prev + gamma_shs(1)...
                + gamma_mps(1);
@@ -284,7 +305,7 @@ classdef CommChannel < handle
                    gamma(i) = gamma_pl_cur + gamma_shs(i) + gamma_mps(i);
                    
                else
-                   gamma(i) = gamma_TOT(path(i,2) + 1, path(i,1) + 1);
+                   gamma(i) = this.getGammaTOTdBAtPt(path(i,:));
                end
            end
         end  
