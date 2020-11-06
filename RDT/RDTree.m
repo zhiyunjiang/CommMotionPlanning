@@ -86,8 +86,8 @@ classdef RDTree < handle
             [nearest, min_dist] = this.nearest(x_rand);
             %check to see if we already have this node added to the tree
             %should be able to just check if zero again, but let's validate
-            if  min_dist > 1/2 
-                path = this.steer(x_rand, nearest);
+            if  min_dist ~= 0 
+                path = this.steer(x_rand, nearest, pppi);
                 %check if the path is collision free, trimming if necessary
                 viable_path = pppi.collisionFree(path);
                 
@@ -157,7 +157,7 @@ classdef RDTree < handle
                     continue;
                 end
                 %want path from from  neighbor to current
-                path = this.getSLPath(neighbor.wrkspcpos, x_current);
+                path = pppi.getSLPath(neighbor.wrkspcpos, x_current);
                 
                 viable_path = pppi.collisionFree(path);
                 if norm(size(viable_path) - size(path)) == 0
@@ -194,7 +194,7 @@ classdef RDTree < handle
                        %obstructing from the first time we looped through
 
                        %path from new to neighbor
-                       path = this.getSLPath(x_current, neighbor.wrkspcpos);
+                       path = pppi.getSLPath(x_current, neighbor.wrkspcpos);
                        %now add the new parent
                        neighbor.setParent(new_node, cost, path);
                     end
@@ -202,7 +202,7 @@ classdef RDTree < handle
             end
         end
           
-        function path = steer(this, x_rand, v_nearest)
+        function path = steer(this, x_rand, v_nearest, pppi)
 
             start = v_nearest.wrkspcpos;
             diff = x_rand - start;
@@ -213,17 +213,15 @@ classdef RDTree < handle
                 phi = atan2(diff(2), diff(1));
 
                 new_diff = [this.steerRad*cos(phi), this.steerRad*sin(phi)];
-                if ~this.isContinuous
-                    new_diff = this.roundSteerPoint(new_diff);
-                end
-                
+                %force the new point to be on our grid, if necessary
+                new_diff = pppi.toRawCoordinate(pppi.toGridCoordinate(new_diff));
 
                 new = start + new_diff;
             else
                new =  x_rand;
             end
             
-           path = this.getSLPath(start, new);
+           path = pppi.getSLPath(start, new);
             
         end
         
@@ -253,101 +251,8 @@ classdef RDTree < handle
                end
             end
         end
-        
-        function rounded = roundSteerPoint(this, raw_steer_pt)
-            rounded = round(raw_steer_pt);
-            %ensure we're not beyond the steer radius
-            if norm(rounded) > this.steerRad
-                index1 = randi(2,1);
-
-                if rounded(index1) > raw_steer_pt(index1)
-                   rounded(index1) = sign(rounded(index1))*(abs(rounded(index1)) - 1);
-                end
-
-                index2 = mod(index1 + 1, 2) + 1;
-                if norm(rounded) < this.steerRad && rounded(index2) > raw_steer_pt(index2)
-                    rounded(index2) = sign(rounded(index2))*(abs(rounded(index2)) - 1);
-                end
-            end
-        end
-        
-        function path = getSLPath(this, start, dest)
-             if this.isContinuous
-                path = [start; dest];
-            else
-                %also calculate intermediate path
-                path = RDTree.getApproxGridSLPath(start, dest);
-            end
-        end
          
     end
     
-    methods(Access = public, Static = true)
-        
-         function path = getApproxGridSLPath(start, dest)
-            %getAppoxGridSLPath - Tries to get a path on the grid that is
-            %as close to a straightline as possible.
-            %INPUT
-            % start - [x,y] point from which the path begins
-            % dest - [x,y] point where the path ends
-            %OUTPUT
-            % path - nx2 matrix, with path(i,:) = [x,y] giving the points
-            % along the path
-            %
-            %In the grid, the path may go in any one of 8 directions: up, up-right,
-            %right, down-right, down, down-left, left, up-left. Or in terms
-            %of clock positions: 12, 1:30, 3, 4:30, 6, 7:30, 9, 10:30. 
-            %
-            %Divides path into steps. For each step, compare the actual
-            %slope achieved so far to the slope we want, then pick slope
-            %from among the possible slopes [based on grid] that will get
-            % there.
-            dist = start - dest;
-            dist_abs = abs(dist);
-            mabs = dist_abs(2)/dist_abs(1);
-            min_path_length = sum(dist_abs) + 1;
-            
-            path = zeros([min_path_length, 2]);
-            path(1,:) = start;
-            last_path_index = min_path_length;
-            for i = 2:min_path_length
-                %just straight up /down
-                if mabs == Inf
-                   path(i,:) = path(i-1,:) + [0,-1*sign(dist(2))];
-                elseif mabs == 0
-                    %just straight left or right
-                    path(i,:) = path(i-1,:) + [-1*sign(dist(1)), 0];
-                else
-                    %get slope from v_nearest to previous point.
-                    prev_tot_delta = abs(path(1,:) - path(i-1, :));
-                    delta = RDTree.getGridSLPathDelta(mabs, dist, prev_tot_delta(1), prev_tot_delta(2));
-                    path(i,:) = path(i-1,:) + delta;
-                end
-                
-                if all(path(i,:) == dest)
-                    last_path_index = i;
-                    break;
-                end
-            end
-            
-            path = path(1:last_path_index,:);
-         end
-    end
-    
-    methods (Access = private, Static = true)
-         function delta = getGridSLPathDelta(true_slope_abs, dist, cur_dx_abs, cur_dy_abs)
-             next_slopes_abs = (cur_dy_abs + [1, 0, 1])./(cur_dx_abs + [0, 1, 1]);
-             [~,dir] =min(abs(true_slope_abs - next_slopes_abs)); 
-             delta = [0,0];
-             if dir == 1 || dir == 3
-               %need more rise
-               delta =  [0, -1*sign(dist(2))];
-             end
-             if dir >= 2
-                %needs to run more
-               delta = delta + [-1*sign(dist(1)), 0];
-             end
-         end
-    end
 end
 

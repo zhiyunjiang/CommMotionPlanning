@@ -90,6 +90,11 @@ classdef Sampler < handle
                 new_sample = this.sampleUniRandCont();
             end
             this.sequence(count + 1,1:2) = new_sample;
+            
+            %sampling always done in (1,1) shifted space, possibly
+            %discretized. Map back to a point in true coordinates
+            new_sample = pppi.toRawCoordinate(new_sample);
+
         end
     end
     
@@ -102,22 +107,20 @@ classdef Sampler < handle
         end
         
         function sample = sampleUniRandCont(this)
-            x_rand = this.ranges(1)*rand(1) + this.offsets(1); 
-            y_rand = this.ranges(2)*rand(1) + this.offsets(2); 
+            %account for different behavior between rand and randi
+            x_rand = (this.ranges(1)-1)*rand(1) + this.offsets(1); 
+            y_rand = (this.ranges(2)-1)*rand(1) + this.offsets(2); 
             sample = [x_rand, y_rand];
         end
         
         function sample = sampleDestination(this, pppi)
-            if this.samplerType == Sampler.UNIRAND_CONT
-                dest = pppi.getGoalRegion().goalPoints;
-            else
-                dest = pppi.getGoalRegion().goalGridPoints;
-            end    
-            
+             
+            dest = pppi.getGoalRegion().goalPoints;   
+            dest_pppi_grid = pppi.toGridCoordinate(dest);
             %randomly choose from the destination set
-            [dest_count, ~] = size(dest);
+            [dest_count, ~] = size(dest_pppi_grid);
             rand_i = randi(dest_count,1);
-            sample = dest(rand_i,:);
+            sample = dest_pppi_grid(rand_i,:);
         end
         
         %based on "Informed RRT*Optimal sampling-based path planning 
@@ -179,8 +182,7 @@ classdef Sampler < handle
 
            circle_sample = Sampler.SampleFromUnitCircle();
            sample = this.C_inf*this.L_inf*circle_sample + this.center;
-           sample = pppi.toGridCoordinate(sample);
-           while ~pppi.gridPtInRegion(sample)
+           while ~pppi.ptInRegion(sample)
                circle_sample = Sampler.SampleFromUnitCircle();
                 sample = this.C_inf*this.L_inf*circle_sample + this.center;
                 sample = pppi.toGridCoordinate(sample);

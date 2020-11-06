@@ -24,10 +24,10 @@ classdef GoalRegion < handle
     % goalGridMap - map of maps. First map key is x corrdinate, second map
     %               keys are y values. Use for quickly looking up whether 
     %               or not a given point is in the goal region 
-    properties
+    properties (Access = public)
         resolution;
-        offset;
-        problemGridRegion;
+        problemRegion;
+        problemGridRegion
         
         goalPoints;
         
@@ -43,16 +43,15 @@ classdef GoalRegion < handle
     % gridPointInGoalRegion - check if a point on the grid is in the goal
     %                           region
     methods
-        function this = GoalRegion(resolution, goal_points, offset, grid_region)
+        function this = GoalRegion(resolution, goal_points, region)
             if resolution == Inf
                error('Goal region must have finite resolution'); 
             end
             this.resolution = resolution;
-            this.offset = offset;
-            this.problemGridRegion = grid_region;
+            this.problemRegion = region;
+            this.problemGridRegion = reshape(this.toGridCoordinate(reshape(region,[2,2])),size(region));
             this.setGoals(goal_points);
         end
-        
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % rawPointInGoalRegion
@@ -64,21 +63,13 @@ classdef GoalRegion < handle
         %
         % Output:
         % tf - true if point is in goal region. False otherwise.
-        function tf =  rawPointInGoalRegion(this, pt)
+        function tf =  pointInGoalRegion(this, pt)
             grid_pt = this.toGridCoordinate(pt);
             tf = this.gridPointInGoalRegion(grid_pt);
         end
-        
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % gridPointInGoalRegion
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % check if a point on the grid is in the goal region
-        % Input:
-        % this - reference to the GoalRegion object
-        % pt - the point [x,y] we're interested in
-        %
-        % Output:
-        % tf - true if point is in goal region. False otherwise.
+    end
+    
+    methods(Access = private)
         function tf = gridPointInGoalRegion(this, pt)
             tf = 0;
             x = pt(1);
@@ -92,9 +83,6 @@ classdef GoalRegion < handle
             end
         end
         
-    end
-    
-    methods(Access = private)
        function setGoals(this, goal_points)
             
             this.goalGridPoints = this.toGridCoordinate(goal_points);
@@ -179,13 +167,8 @@ classdef GoalRegion < handle
             end
         end
        
-       function coord =  toGridCoordinate(this,val)
-           if this.resolution == Inf
-               coord = val - this.offset;
-           else
-                step_size = 1/this.resolution;
-                coord = round((val - this.offset)/step_size);
-           end
+       function coord =  toGridCoordinate(this,pt)
+          coord = toGridFromRaw(this.problemRegion, this.resolution, pt);
        end
     end
 end

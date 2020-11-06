@@ -11,17 +11,20 @@
 %       Nardo's paper - does not account for multipath
 classdef ChannelAnalyzer < handle
     
-    properties
-        commChannel;
-        channelParams;
-        gammaTH;
-        noMP;
-        ricDist;
-        riceCDFLUT;%Rician dist look up table
+    properties (Access = public)
+        commChannel;%the comm channel to be analyzed
+        channelParams;%channel params defining the comm channel
+        gammaTH;%minimum requird channel power for communication
+        noMP;%if set, ignores multipath effects
+        ricDist;%Rician distribution that characterizes multipath component
+        riceCDFLUT;%Rician dist look up table for
         LUTRes = 1000; % the number of entries to build out in the LUT
-        LUTMax;
-        
+        LUTMax;%maximum value in the look up table.
+    end
+    
+    properties (Access = private)
         %from arjun_python/fpd_with_mp.py
+        % used for numerical integral approximation
         g;
         u;
         delU;

@@ -12,15 +12,15 @@
 % Output:
 % raw_pt - x,y in continuous, non-shifted space
 function raw_pt = toRawFromGrid(region, res, grid_pt)
-    gMin = 1;
-    xGMax = ceil( (region(1) - region(2))*res);
-    yGMax = ceil( (region(3) - region(4))*res);
-    
-    if any( grid_pt(:,1) > xGMax ) || any( grid_pt(:,1) < gMin )...
-        || any( grid_pt(:,2) > yGMax ) || any( grid_pt(:,2) <gMin )
-        warning('Some points are outside of the region');
+    if isinf(res)
+       res = 1;%we just need to shift 
     end
     
     raw_pt = (grid_pt-1)/res + [region(2), region(4)];
+    
+    if any( raw_pt(:,1) > region(1) ) || any( raw_pt(:,1) < region(2) )...
+        || any( raw_pt(:,2) > region(3) ) || any( raw_pt(:,2) < region(4) )
+        warning('Some points are outside of the region');
+    end
 end
 

@@ -97,9 +97,8 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
                error('PathPlanningProblem.region must have length of 4 ( [x_max x_min y_max y_min])');
             else
                 this.region = region;
-                l_x = region(1) - region(2); l_y = region(3) - region(4);
                 this.offset = [region(2), region(4)];
-                this.gridRegion = [l_x*resolution, 0, l_y*resolution, 0];
+                this.gridRegion = reshape(this.toGridCoordinate(reshape(region, [2,2])),size(region));
             end
             
             if length(source) ~= 2
@@ -108,7 +107,7 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
                 this.source = source;
             end
             
-            this.goalRegion = GoalRegion(destination_resolution, destinations, this.offset, this.gridRegion);
+            this.goalRegion = GoalRegion(destination_resolution, destinations, this.region);
            
             this.obstacleMod = obstacle_mod;
             this.costFunction = cost_func;
@@ -121,14 +120,14 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
         % different source
         % Input:
         % this - reference to the PathPlanningProblem object
-        % grd_src - the new source in grid coordinates
+        % new_src - the new source
         %
         % Output:
         % copy - the copy of the path planning problem
-        function copy = copyWithNewSource(this, grd_src)
+        function copy = copyWithNewSource(this, new_src)
            %shallow copy using inherited copy() method from matlab.mixin.Copyable
            copy = this.copy(); 
-           copy.source = this.toRawCoordinate(grd_src);
+           copy.source = new_src;
         end
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -151,6 +150,7 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
             if nargin == 4
                 mode = 1;
             end
+
             cost = this.costFunction(n1, n2, path, mode);
         end 
         
@@ -180,15 +180,9 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
         %
         % Output:
         % tf - true if the point is in the goal region. False otherwise
-        function tf = pointInGoalRegion(this, grid_pt)
-            if this.resolution == Inf
-               %we're dealing with raw points, will need to map to grid first
-               tf = this.goalRegion.rawPointInGoalRegion(grid_pt);
-            else
-                tf = this.goalRegion.gridPointInGoalRegion(grid_pt);
-            end
+        function tf = pointInGoalRegion(this, pt)
+            tf = this.goalRegion.pointInGoalRegion(pt);
         end
-        
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % collisionFree
@@ -213,11 +207,8 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
                     terminate_early = 1;
                     break
                 end
-                %path will be in terms of grid coordinates only. To
-                %compare to objects, convert back to true scale
-
-                p1 = this.toRawCoordinate(path(i,:));
-                p2 = this.toRawCoordinate(path(i+1,:));
+                p1 = path(i,:);
+                p2 = path(i+1,:);
                 if ~ this.obstacleMod.collisionFree(p1, p2)
                     terminate_early = 1;
                    break; 
@@ -232,27 +223,27 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
         end
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % gridPtInRegion
+        % ptInRegion
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % Cheks if point is in the workspace
         % Input:
         % this - reference to the PathPlanningProblem object
-        % grd_pt - point [x,y] in grid coordinates. 
+        % pt - point [x,y] 
         %
         % Output:
         % tf - true if the point is in the workspace. False otherwise
-        function tf = gridPtInRegion(this, grd_pt)
+        function tf = ptInRegion(this, pt)
             tf = 0;
-            x = grd_pt(1);
-            y = grd_pt(2);
-            if x <= this.gridRegion(1) && (x >= this.gridRegion(2)) && ...
-                    y <= this.gridRegion(3) && (y >= this.gridRegion(4))
+            x = pt(1);
+            y = pt(2);
+            if x <= this.region(1) && (x >= this.region(2)) && ...
+                    y <= this.region(3) && (y >= this.region(4))
                tf = 1; 
             end
         end
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % gridPtInRegion
+        % getGridNeighbors
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % Finds directly reachable neighbors of a grid point
         % Input:
@@ -263,7 +254,8 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
         % neighbors - neighboring grid points (up to 8). Excludes neighbors
         %               that are not in workspace or for which the
         %               straightline path from grid_pt is obstructed
-        function neighbors = getGridNeighbors(this, grd_pt)
+        function neighbors = getNeighbors(this, pt)
+           grd_pt = this.toGridCoordinate(pt);
            neighbors = [];
            offsets = [[0,1];[1,0];[-1, 0];[0, -1];[1,1];[1, -1];[-1, -1];[-1, 1]];
            for i=1:length(offsets)
@@ -276,6 +268,7 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
                   end
               end
            end
+           neighbors = this.toRawCoordinate(neighbors);
         end
        
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -291,20 +284,9 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
         % Output:
         % coord - grid coordinates of pt
         function coord =  toGridCoordinate(this,pt)
-           %toGridCoordinate - takes raw point (x,y) and converts to point
-           %on grid by (1) shifting by offset, (2) scaling by resolution,
-           %and (3) rounding to nearest point
-           %
-           %Input
-           % this - this PathPlanningProblem object
-           % val - raw corrdinate (x,y)
-           if this.resolution == Inf
-               coord = pt - this.offset;
-           else
-               coord = round((pt - this.offset)/this.getStepSize());
-           end
+            
+           coord = toGridFromRaw(this.region, this.resolution, pt);
         end
-       
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % toRawCoordinate
@@ -316,13 +298,9 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
         % grd_pt - point [x,y] in grid coordinates. 
         %
         % Output:
-        % raw_pt - the point in raw coordinates
-        function raw_pt = toRawCoordinate(this, grd_pt)
-           if this.resolution == Inf
-               raw_pt = grd_pt + this.offset;
-           else
-               raw_pt = (grd_pt*this.getStepSize()) + this.offset;
-           end
+        % coord - the point in raw coordinates
+        function coord = toRawCoordinate(this, grd_pt)
+           coord = toRawFromGrid(this.region, this.resolution, grd_pt);
         end
        
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -331,36 +309,82 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
         % Plots the problem
         % Input:
         % this - reference to the PathPlanningProblem object
-        % use_grid_scale - If true, plot with lower left being (0,0), step
-        % size of 1. Otherwise, plot with original prolem scale and origin.
         %
-        % Output:
-        % raw_pt - the point in raw coordinates
-        function plotProb(this, use_grid_scale)
-           scale = 1;
-           plot_offset = [0,0];
-           obs_scale = this.resolution;
-           obs_offset = this.offset;
-           if ~ use_grid_scale
-              scale = this.getStepSize(); 
-              plot_offset = this.offset;
-              obs_scale = 1;
-              obs_offset = [0,0];
-           end
+        function plotProb(this)
+           obs_scale = 1;
+           obs_offset = [0,0];
+
            
            this.obstacleMod.plotObstacles(obs_scale, obs_offset);
-           src = scale * this.getSourceGrid() + plot_offset;
+           src = this.getSource();
            scatter(src(1), src(2), 90, 'filled', 'ys', 'MarkerEdgeColor', 'k');
-           dests = scale*this.goalRegion.goalGridPoints() + plot_offset;
+           dests = this.goalRegion.goalPoints();
          
            scatter(dests(:,1), dests(:,2), 90, 'filled', 'yd', 'MarkerEdgeColor', 'k');
            
-           xlim(scale*[this.gridRegion(2), this.gridRegion(1)] + plot_offset(1));
-           ylim(scale*[this.gridRegion(4), this.gridRegion(3)] + plot_offset(2));   
+           xlim([this.region(2), this.region(1)]);
+           ylim([this.region(4), this.region(3)]);   
         end
         
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % isContinuous
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Indicates whether or not the problem has been posed as continuous
+        % or discrete.
+        % Input:
+        % this - reference to the PathPlanningProblem object
+        %
+        % Output:
+        % tf - 1 if problem is in continuous space, 0 if discretized
+        function tf = isContinuous(this)
+            tf = isinf(this.resolution);
+        end
+        
+        function path = getSLPath(this, start, dest)
+            start = this.toGridCoordinate(start);
+            dest = this.toGridCoordinate(dest);
+            if this.isContinuous()
+                % may still need break up into waypoints
+                path = [start; dest];
+            else
+                %approximate a straightline through the grid
+                dist = start - dest;
+                dist_abs = abs(dist);
+                mabs = dist_abs(2)/dist_abs(1);
+                min_path_length = sum(dist_abs) + 1;
+
+                path = zeros([min_path_length, 2]);
+                path(1,:) = start;
+                last_path_index = min_path_length;
+                for i = 2:min_path_length
+                    %just straight up /down
+                    if mabs == Inf
+                       path(i,:) = path(i-1,:) + [0,-1*sign(dist(2))];
+                    elseif mabs == 0
+                        %just straight left or right
+                        path(i,:) = path(i-1,:) + [-1*sign(dist(1)), 0];
+                    else
+                        %get slope from v_nearest to previous point.
+                        prev_tot_delta = abs(path(1,:) - path(i-1, :));
+                        delta = PathPlanningProblem.getGridSLPathDelta(mabs, dist, prev_tot_delta(1), prev_tot_delta(2));
+                        path(i,:) = path(i-1,:) + delta;
+                    end
+
+                    if all(path(i,:) == dest)
+                        last_path_index = i;
+                        break;
+                    end
+                end
+
+                path = path(1:last_path_index,:);
+
+            end
+            path = this.toRawCoordinate(path);
+         end
+        
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % Getters and Setters
-       
+        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         function region = getRegion(this)
             region = this.region;
         end
@@ -400,6 +424,23 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
         function obstacle_mod = getObstacleMod(this)
            obstacle_mod = this.obstacleMod; 
         end
+        
+    end
+    
+    methods (Access = private, Static = true)
+         function delta = getGridSLPathDelta(true_slope_abs, dist, cur_dx_abs, cur_dy_abs)
+             next_slopes_abs = (cur_dy_abs + [1, 0, 1])./(cur_dx_abs + [0, 1, 1]);
+             [~,dir] =min(abs(true_slope_abs - next_slopes_abs)); 
+             delta = [0,0];
+             if dir == 1 || dir == 3
+               %need more rise
+               delta =  [0, -1*sign(dist(2))];
+             end
+             if dir >= 2
+                %needs to run more
+               delta = delta + [-1*sign(dist(1)), 0];
+             end
+         end
     end
 end
 

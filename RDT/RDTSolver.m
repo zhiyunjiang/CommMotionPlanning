@@ -52,6 +52,10 @@ classdef RDTSolver < handle
             end
         end
         
+        function root = getRoot(this)
+           root = this.rdTree.treeNodes(1); 
+        end
+        
         function tail = getBSF(this)
             tail = this.rdTree.BSF;
         end
@@ -71,19 +75,18 @@ classdef RDTSolver < handle
         function initializeTree(this, pppi)
            
            %see Karaman & Frazzoli, 2011, page 29. Here, d=2 
-           root_pos = pppi.getSourceGrid();
-           gridRegion = pppi.getGridRegion();
-           length = (gridRegion(1) - gridRegion(2));
-           width = (gridRegion(3) - gridRegion(4));
-           grid_area = length*width;%total area will be >= area of X_free
-           gamma =  sqrt(3*(grid_area/2*pi));
+           root_pos = pppi.getSource();
+           region = pppi.getRegion();
+           length = (region(1) - region(2));
+           width = (region(3) - region(4));
+           area = length*width;%total area will be >= area of X_free
+           gamma =  sqrt(3*(area/2*pi));
 
-           is_continuous = (pppi.getStepSize() == 0);
-           this.rdTree.initialize(gamma, root_pos, is_continuous);
+           this.rdTree.initialize(gamma, root_pos, pppi.isContinuous());
         end
         
         function tf = startInDest(this, pppi)
-            root_pos = pppi.getSourceGrid();
+            root_pos = pppi.getSource();
             tf = pppi.pointInGoalRegion(root_pos);
             if tf
                 this.rdTree.BSF = this.rdTree.treeNodes(1);
