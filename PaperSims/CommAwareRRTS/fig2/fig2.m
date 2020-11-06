@@ -76,16 +76,16 @@ for i = 1:n_sims
 
 
     %Create Predicted Channel
-    cawo = CAWithObservations(cp, cc1, obs_pos, obs_vals);
-    cawo_poi = CAWithObservations(cp_poi, cc2, obs_pos_poi, obs_vals_poi);
+    pc1 = PredictedChannel(cp, cc1, obs_pos, obs_vals);
+    pc2 = PredictedChannel(cp_poi, cc2, obs_pos_poi, obs_vals_poi);
 
 
     %UPLOADING
     scenario = 1;
 
-    plotPredictedField(objective, scenario, num_bs, cawo, cawo_poi, qos, p_th, gamma_TH);
+    plotPredictedField(objective, scenario, num_bs, pc1, pc2, qos, p_th, gamma_TH);
 
-    cost_fxn = getCostFxnPredicted(objective, scenario, num_bs, cawo, cawo_poi, mp, qos, eps, p_th, gamma_TH);
+    cost_fxn = getCostFxnPredicted(objective, scenario, num_bs, pc1, pc2, mp, qos, eps, p_th, gamma_TH);
     problem_instance_OR = PathPlanningProblem(region, res, source, goal, obs_mod, cost_fxn);
 
     rs_handle = plotComAwareRRT(problem_instance_OR, q_b, q_poi);
@@ -95,13 +95,13 @@ for i = 1:n_sims
 
     %BROADCASTING/RELAY
     scenario = 2;%broadcasting - AND
-    cost_fxn = getCostFxnPredicted(objective, scenario, num_bs, cawo, cawo_poi, mp, qos, eps, p_th, gamma_TH);
+    cost_fxn = getCostFxnPredicted(objective, scenario, num_bs, pc1, pc2, mp, qos, eps, p_th, gamma_TH);
     problem_instance_AND = PathPlanningProblem(region, res, source, goal, obs_mod, cost_fxn);
     rrt_solver_AND = getRRTSolver();
     rrt_path_AND = runOneSim(rrt_solver_AND, problem_instance_AND);
     true_costfxn_AND = getCostFxnTrue(objective, scenario, num_bs, cc1, cc2, mp, qos, eps, gamma_TH);
 
-    path_handles = plotPaths(rrt_path_OR/res, 'RRT* Path (Upload)', rrt_path_AND/res, 'RRT* Path (Broadcast)');
+    path_handles = plotPaths(rrt_path_OR, 'RRT* Path (Upload)', rrt_path_AND, 'RRT* Path (Broadcast)');
 
     legend([path_handles, rs_handle])
     saveas(gcf, sprintf('fig2_run_%d', i));
@@ -139,9 +139,9 @@ for i = 1:n_sims
 
     %Save off time series in plot
     %get series of BSF and plot over time
-    [costs, dists] = rrt_solver_AND.getBSFTimeSeries();
-    disc_dist = (costs(:,2) - eps*dists(:,2));
-    plot(costs(:,1), disc_dist/res, 'LineWidth', line_width)
+    [costs, ~] = rrt_solver_AND.getBSFTimeSeries();
+    %disc_dist = (costs(:,2) - eps*dists(:,2));
+    plot(costs(:,1), costs(:,2), 'LineWidth', line_width)
     xlabel('Time (s)')
     xlim([0,3*60])
     ylabel('Cost (m)')
@@ -149,9 +149,9 @@ for i = 1:n_sims
     close(gcf);
 
     fprintf('Iteration %d: created fig3a\n',i);
-    [costs, dists] = rrt_solver_OR.getBSFTimeSeries();
-    disc_dist = (costs(:,2) - eps*dists(:,2));
-    plot(costs(:,1), disc_dist/res, 'LineWidth', line_width)
+    [costs, ~] = rrt_solver_OR.getBSFTimeSeries();
+    %disc_dist = (costs(:,2) - eps*dists(:,2));
+    plot(costs(:,1), costs(:,2), 'LineWidth', line_width)
     xlabel('Time (s)')
     xlim([0,3*60])
     ylabel('Cost (m)')
@@ -176,7 +176,6 @@ rrt_OR_per_disc_mean = mean(rrt_OR_per_disc);
 sp_OR_per_disc_mean = mean(sp_OR_per_disc);
 
 
-
 fprintf('\nBROADCAST/RELAY STATS\n')
 rrt_AND_true_cost_mean = mean(rrt_AND_true_cost(i));
 sp_AND_true_cost_mean = mean(sp_AND_true_cost(i));
@@ -194,7 +193,7 @@ save(strcat('fig2_ws_',date));
 %%
 function disc_distance = calcDiscDistance(full_cost, dist, eps)
     disc_distance = (full_cost - dist*eps);
-    if abs(disc_distance) < 0.25 %discard rounding errors since the lowest non-zero value this can be is 1
+    if abs(disc_distance) <0%avoid rounding errors that give us negative distance
         disc_distance = 0;
     end
 end

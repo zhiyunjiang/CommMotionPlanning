@@ -16,7 +16,7 @@
 
 function rshandle = plotComAwareRRT(pppi,q1, q2)
     hold on
-    pppi.plotProb(0)
+    pppi.plotProb()
     rshandle = plotRS(q1);
     
     if nargin == 3

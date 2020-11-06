@@ -310,6 +310,10 @@ classdef CommChannel < handle
            end
         end  
         
+        function grid_pt = toGridCoordinate(this, pt)
+            grid_pt = toGridFromRaw(this.region, this.res, pt);
+        end
+        
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % plotting
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -403,7 +407,7 @@ classdef CommChannel < handle
         end
         
         function plotField(this, field, field_title, c_bar_label)
-            imagesc(this.gx(1,:), this.gy(:,1), field);
+            imagesc(this.gx(1,:), this.gy(:,1), field');
             set(gca, 'YDir', 'normal');
             title(field_title);
             xlabel('x (m)');

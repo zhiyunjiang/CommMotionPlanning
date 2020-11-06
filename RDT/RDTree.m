@@ -213,10 +213,9 @@ classdef RDTree < handle
                 phi = atan2(diff(2), diff(1));
 
                 new_diff = [this.steerRad*cos(phi), this.steerRad*sin(phi)];
-                %force the new point to be on our grid, if necessary
-                new_diff = pppi.toRawCoordinate(pppi.toGridCoordinate(new_diff));
-
                 new = start + new_diff;
+                %snap to grid
+                new = pppi.toRawCoordinate(pppi.toGridCoordinate(new));
             else
                new =  x_rand;
             end

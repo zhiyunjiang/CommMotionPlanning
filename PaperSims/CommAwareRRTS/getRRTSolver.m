@@ -19,6 +19,6 @@ function rrt_solver = getRRTSolver()
     sampler = Sampler(type, dest_freq, sequence);
 
     %0 - RDT, 1 - RDT*
-    do_rewire = 1;steer_rad = 20;
+    do_rewire = 1;steer_rad = 2;
     rrt_solver = RDTSolver(sampler, stop_criteria, do_rewire, steer_rad);
 end

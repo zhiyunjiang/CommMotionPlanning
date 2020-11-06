@@ -76,8 +76,8 @@ cc2_fig_4.simulateSH(); cc2_fig_4.simulateMP(MP_Mdl);
 [obs_pos_poi, obs_vals_poi] = cc2_fig_4.randSample(n_samples);
 
 % Predict the channel
-cawo_fig_4 = CAWithObservations(cp, cc1_fig_4, obs_pos, obs_vals);
-cawo_poi_fig_4 = CAWithObservations(cp_poi, cc2_fig_4, obs_pos_poi, obs_vals_poi);
+pc1 = PredictedChannel(cp, cc1_fig_4, obs_pos, obs_vals);
+pc2 = PredictedChannel(cp_poi, cc2_fig_4, obs_pos_poi, obs_vals_poi);
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -92,9 +92,9 @@ R1 = 8;
 qos1 = QoSParams(BER, R1, receiver_noise);
 
 
-plotPredictedField(objective, scenario, num_bs, cawo_fig_4, cawo_poi_fig_4, qos1, p_th, gamma_TH);
+plotPredictedField(objective, scenario, num_bs, pc1, pc2, qos1, p_th, gamma_TH);
 caxis([-40, 10])
-cost_fxn = getCostFxnPredicted(objective, scenario, num_bs, cawo_fig_4, cawo_poi_fig_4, mp, qos1, delta, p_th, gamma_TH);
+cost_fxn = getCostFxnPredicted(objective, scenario, num_bs, pc1, pc2, mp, qos1, delta, p_th, gamma_TH);
 problem_instance_MIN = PathPlanningProblem(region, res, source, goal, obs_mod, cost_fxn);
 rs_handle = plotComAwareRRT(problem_instance_MIN, q_b, q_poi);
 
@@ -102,7 +102,7 @@ rrt_solver_MIN = getRRTSolver();
 rrt_path_MIN = runOneSim(rrt_solver_MIN, problem_instance_MIN);
 true_costfxn_MIN = getCostFxnTrue(objective, scenario, num_bs, cc1_fig_4, cc2_fig_4, mp, qos1, delta, gamma_TH);
 
-path_handles = plotPaths(rrt_path_MIN/res, 'RRT* Path (Upload)');
+path_handles = plotPaths(rrt_path_MIN, 'RRT* Path (Upload)');
 legend([path_handles, rs_handle]);
 caxis([-20,0])
 saveas(gcf, sprintf('fig4a_run_%d', i));
@@ -113,8 +113,8 @@ rrt_MIN_true_cost(i) = true_costfxn_MIN([],[],rrt_path_MIN,1);
 sp_MIN_true_cost(i) = true_costfxn_MIN([],[],rrt_path_SP_f1,1);
 
 rrt_MIN_length(i) = GridDist(rrt_path_MIN);
-rrt_MIN_avg_com_power(i) = (rrt_MIN_true_cost(i) - delta*mp.motionEnergy(rrt_MIN_length(i)/res))/(rrt_MIN_length(i)/res);
-sp_MIN_avg_com_power(i) = (sp_MIN_true_cost(i) - delta*mp.motionEnergy(sp_f1_length/res))/(sp_f1_length/res);
+rrt_MIN_avg_com_power(i) = (rrt_MIN_true_cost(i) - delta*mp.motionEnergy(rrt_MIN_length(i)))/(rrt_MIN_length(i));
+sp_MIN_avg_com_power(i) = (sp_MIN_true_cost(i) - delta*mp.motionEnergy(sp_f1_length))/(sp_f1_length);
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -130,9 +130,9 @@ scenario = 2;
 R2 = 6;
 qos2 = QoSParams(BER, R2, receiver_noise);
 
-plotPredictedField(objective, scenario, num_bs, cawo_fig_4, cawo_poi_fig_4, qos2, p_th, gamma_TH);
+plotPredictedField(objective, scenario, num_bs, pc1, pc2, qos2, p_th, gamma_TH);
 
-cost_fxn = getCostFxnPredicted(objective, scenario, num_bs, cawo_fig_4, cawo_poi_fig_4, mp, qos2, delta, p_th, gamma_TH);
+cost_fxn = getCostFxnPredicted(objective, scenario, num_bs, pc1, pc2, mp, qos2, delta, p_th, gamma_TH);
 problem_instance_MAX = PathPlanningProblem(region, res, source, goal, obs_mod, cost_fxn);
 caxis([0,20])
 
@@ -141,7 +141,7 @@ rrt_solver_MAX = getRRTSolver();
 rrt_path_MAX = runOneSim(rrt_solver_MAX, problem_instance_MAX);
 true_costfxn_MAX = getCostFxnTrue(objective, scenario, num_bs, cc1_fig_4, cc2_fig_4, mp, qos2, delta, gamma_TH);
 
-path_handles = plotPaths(rrt_path_MAX/res, 'RRT* Path (Broadcast)');
+path_handles = plotPaths(rrt_path_MAX, 'RRT* Path (Broadcast)');
 legend([path_handles, rs_handle]);
 caxis([-20,0])
 saveas(gcf, sprintf('fig4b_run_%d', i));
@@ -152,8 +152,8 @@ rrt_MAX_true_cost(i) = true_costfxn_MAX([],[],rrt_path_MAX,1);
 sp_MAX_true_cost(i) = true_costfxn_MAX([],[],rrt_path_SP_f1,1);
 
 rrt_MAX_length(i) = GridDist(rrt_path_MAX);
-rrt_MAX_avg_com_power(i) = (rrt_MAX_true_cost(i) - delta*mp.motionEnergy(rrt_MAX_length(i)/res))/(rrt_MAX_length(i)/res);
-sp_MAX_avg_com_power(i) = (sp_MAX_true_cost(i) - delta*mp.motionEnergy(sp_f1_length/res))/(sp_f1_length/res);
+rrt_MAX_avg_com_power(i) = (rrt_MAX_true_cost(i) - delta*mp.motionEnergy(rrt_MAX_length(i)))/(rrt_MAX_length(i));
+sp_MAX_avg_com_power(i) = (sp_MAX_true_cost(i) - delta*mp.motionEnergy(sp_f1_length))/(sp_f1_length);
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -165,10 +165,10 @@ sp_MAX_avg_com_power(i) = (sp_MAX_true_cost(i) - delta*mp.motionEnergy(sp_f1_len
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 scenario = 3;
 
-plotPredictedField(objective, scenario, num_bs, cawo_fig_4, cawo_poi_fig_4, qos2, p_th, gamma_TH);
+plotPredictedField(objective, scenario, num_bs, pc1, pc2, qos2, p_th, gamma_TH);
 caxis([0,20])
 
-cost_fxn = getCostFxnPredicted(objective, scenario, num_bs, cawo_fig_4, cawo_poi_fig_4, mp, qos2, delta, p_th, gamma_TH);
+cost_fxn = getCostFxnPredicted(objective, scenario, num_bs, pc1, pc2, mp, qos2, delta, p_th, gamma_TH);
 problem_instance_SUM = PathPlanningProblem(region, res, source, goal, obs_mod, cost_fxn);
 
 rs_handle = plotComAwareRRT(problem_instance_SUM, q_b, q_poi);
@@ -176,7 +176,7 @@ rrt_solver_SUM = getRRTSolver();
 rrt_path_SUM = runOneSim(rrt_solver_SUM, problem_instance_SUM);
 true_costfxn_SUM = getCostFxnTrue(objective, scenario, num_bs, cc1_fig_4, cc2_fig_4, mp, qos2, delta, gamma_TH);
 
-path_handles = plotPaths(rrt_path_SUM/res, 'RRT* Path (Relay)');
+path_handles = plotPaths(rrt_path_SUM, 'RRT* Path (Relay)');
 legend([path_handles, rs_handle])
 caxis([-20,0])
 saveas(gcf, sprintf('fig4c_run_%d', i));
@@ -187,8 +187,8 @@ rrt_SUM_true_cost(i) = true_costfxn_SUM([],[],rrt_path_SUM,1);
 sp_SUM_true_cost(i) = true_costfxn_SUM([],[],rrt_path_SP_f1,1);
 
 rrt_SUM_length(i) = GridDist(rrt_path_SUM);
-rrt_SUM_avg_com_power(i) = (rrt_SUM_true_cost(i) - delta*mp.motionEnergy(rrt_SUM_length(i)/res))/(rrt_SUM_length(i)/res);
-sp_SUM_avg_com_power(i) = (sp_SUM_true_cost(i) - delta*mp.motionEnergy(sp_f1_length/res))/(sp_f1_length/res);
+rrt_SUM_avg_com_power(i) = (rrt_SUM_true_cost(i) - delta*mp.motionEnergy(rrt_SUM_length(i)))/(rrt_SUM_length(i));
+sp_SUM_avg_com_power(i) = (sp_SUM_true_cost(i) - delta*mp.motionEnergy(sp_f1_length))/(sp_f1_length);
 
 end
 save(strcat('fig4_ws_',date));

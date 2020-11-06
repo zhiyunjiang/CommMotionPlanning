@@ -7,7 +7,7 @@ q_b = [0 0];
 n_PL = 4.2;  
 K_PL = -40;
 
-sh_decorr = 6;    
+sh_decorr = 3.09;    
 alpha = 8.41;
 sigma_SH = sqrt(alpha);
 PSD_at_f_c = 30;
@@ -35,7 +35,7 @@ N_sin = 5000;
 
 res = 2/mp_decorr;
 cc = CommChannel(cp, N_sin, region, res);
-cc.simulateSH();cc.simulateMP();
+cc.simulateSH();cc.simulateMP(2);
 [pos, vals] = cc.randSample(5);
 
 gammas = cc.getGammaTOTdBAtPt(pos);

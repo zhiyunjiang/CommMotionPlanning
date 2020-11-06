@@ -13,7 +13,7 @@ classdef PredictedChannel < handle
         
         obsCount;
         obsVals;
-        obsGridPoss;% in gridCoordinates
+        obsPos;% in gridCoordinates
         obsPL;
         obsDiff;
         obsCov;
@@ -47,12 +47,12 @@ classdef PredictedChannel < handle
             this.cc = comm_channel;
             
             this.obsCount = length(channel_samples);
-            this.obsGridPoss = observation_pos;
+            this.obsPos = observation_pos;
             this.obsVals = channel_samples;
             if this.useEstimatedParams
                 this.estimatePLParams();
             end
-            this.obsPL = this.estimatePL(this.obsGridPoss);
+            this.obsPL = this.estimatePL(this.obsPos);
             this.obsDiff = this.obsVals - this.obsPL;
             if this.useEstimatedParams
                 this.estimateSHMPParams();
@@ -96,7 +96,8 @@ classdef PredictedChannel < handle
         % Output:
         % mean_dB - returns expected channel gain dB
         function mean_dB = getMeanAtGridPoint(this, pt)
-           mean_dB = this.means(pt(1)+1, pt(2) + 1); 
+           grid_pt = this.cc.toGridCoordinate(pt);
+           mean_dB = this.means(grid_pt(1), grid_pt(2)); 
         end
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -113,8 +114,9 @@ classdef PredictedChannel < handle
         % p_conn - the probability that the channel gain at pt is above
         %           gamma_th
         function p_conn = posteriorPConn(this, pt, gamma_th)
-            mean = this.means(pt(1) + 1, pt(2) + 1);
-            variance = this.vars(pt(1) + 1, pt(2) + 1);
+            grid_pt = this.cc.toGridCoordinate(pt);
+            mean = this.means(grid_pt(1), grid_pt(2));
+            variance = this.vars(grid_pt(1), grid_pt(2));
             
             p_conn = normcdf(gamma_th, mean, sqrt(variance), 'upper');
         end
@@ -128,22 +130,20 @@ classdef PredictedChannel < handle
         % this - reference to the PredictedChannel object
         % gamma_th - the minimum required channel gain for communication
         function plotPosteriors2D(this, gamma_th)
-           res = this.cc.res;
-           region = this.cc.region()*res;
-           x_counts = region(1) - region(2) + 1;
-           y_counts = region(3) - region(4) + 1;
-           post_map = zeros([y_counts, x_counts]);
+           [gx, gy] = this.cc.getMeshGrid();
+           grd_sz = size(gx);
+           x_vals = gx(1,:);
+           y_vals = gy(:,1);
+           post_map = zeros(grd_sz);
            %imagesc plots the first index as the column number, second as
            %row number, so we save off data as a transposed array
-           for i = 1:x_counts
-              for j = 1:y_counts
-                    x_grid = i-1;
-                    y_grid = j-1;
-                    p_conn = this.posteriorPConn([x_grid, y_grid], gamma_th);
+           for i = 1:grd_sz(2)
+              for j = 1:grd_sz(1)
+                    p_conn = this.posteriorPConn([x_vals(i), y_vals(j)], gamma_th);
                     post_map(j,i) = p_conn;
               end
            end
-           imagesc(this.cc.gx(1,:), this.cc.gy(:,1), post_map(:,:,3));
+           imagesc(x_vals, y_vals, post_map);
            set(gca, 'YDir', 'normal');
            c = colorbar;
            c.Label.String = 'Probability of Connectivity';
@@ -170,17 +170,14 @@ classdef PredictedChannel < handle
         % conn_field - matrix of the same dimension as the grid-scaled
         %               workspace. Represents the binary connection field.
         function conn_field = getConnectionField(this, p_th, gamma_th)
-           res = this.cc.res;
-           region = this.cc.region()*res;
-           x_counts = region(1) - region(2) + 1;
-           y_counts = region(3) - region(4) + 1;
-           conn_field = zeros([x_counts, y_counts]);
-           for i = 1:x_counts
-              for j = 1:y_counts
-                    x_grid = i-1;
-                    y_grid = j-1;
-                    conn = this.posteriorPConn([x_grid, y_grid], gamma_th) >= p_th;
-                    conn_field(j,i) = conn;
+           [gx, gy] = this.cc.getMeshGrid();
+           x_vals = gx(1,:);
+           y_vals = gy(:,1);
+           conn_field = zeros(flip(size(gx)));
+           for i = 1:length(x_vals)
+              for j = 1:length(y_vals)
+                    conn = this.posteriorPConn([x_vals(i), y_vals(j)], gamma_th) >= p_th;
+                    conn_field(i,j) = conn;
               end
            end
         end
@@ -197,7 +194,7 @@ classdef PredictedChannel < handle
         %           channel is good enough for communication
         % gamma_th - the minimum required channel gain for communication
         function plotConnected2D(this, p_th, gamma_th)
-           conn_field = this.getConnectionField(p_th);
+           conn_field = this.getConnectionField(p_th, gamma_th);
            title = strcat('Connected Regions for \Gamma_{th} = ', sprintf('%d dB', gamma_th),...
                            ', p_{conn} >= ', sprintf('%g',p_th));
            this.cc.plotField(conn_field,title);
@@ -211,22 +208,20 @@ classdef PredictedChannel < handle
         % Input:
         % this - reference to the PredictedChannel object
         function setStats(this)
-           res = this.cc.res;
-           region = this.cc.region()*res;
-           x_counts = region(1) - region(2) + 1;
-           y_counts = region(3) - region(4) + 1;
-           this.means = zeros([x_counts, y_counts]);
-           this.vars = zeros([x_counts, y_counts]);
-           for i = 1:x_counts
-              for j = 1:y_counts
-                    x_grid = i-1;
-                    y_grid = j-1;
-                    this.means(i,j) = this.posteriorExpecteddB([x_grid, y_grid]);
-                    this.vars(i,j) = this.calcVariance([x_grid, y_grid]);
+           [gx, gy] = this.cc.getMeshGrid();
+           grd_sz = size(gx);
+           x_vals = gx(1,:);
+           y_vals = gy(:,1);
+           this.means = zeros(flip(grd_sz));
+           this.vars = zeros(flip(grd_sz));
+           for i = 1:grd_sz(2)
+              for j = 1:grd_sz(1)
+                    pt = [x_vals(i), y_vals(j)];
+                    this.means(i,j) = this.posteriorExpecteddB(pt);
+                    this.vars(i,j) = this.calcVariance(pt);
               end
            end
         end
-        
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % plotMeans2D
@@ -259,13 +254,11 @@ classdef PredictedChannel < handle
         % exp_req_tx_pwr - matrix of expected required transmit powers over
         %                   the workspace
         function exp_req_tx_pwr = getEReqTXPowerW(this, qos)
-           res = this.cc.res;
-           region = this.cc.region()*res;
-           x_counts = region(1) - region(2) + 1;
-           y_counts = region(3) - region(4) + 1;
-           exp_req_tx_pwr = zeros([x_counts, y_counts]);
-           for i = 1:x_counts
-              for j = 1:y_counts
+           [gx, ~] = this.cc.getMeshGrid();
+           grid_sz = size(gx);
+           exp_req_tx_pwr = zeros(flip(grid_sz));
+           for i = 1:grid_sz(2)
+              for j = 1:grid_sz(1)
                     expected_gamma = this.means(i,j);
                     variance = this.vars(i,j);
                     exp_req_tx_pwr(i,j) = qos.expReqTXPowerW(expected_gamma, variance);
@@ -287,7 +280,7 @@ classdef PredictedChannel < handle
         % req_power - field of expected required power, as calculated in 
         %               getEReqTXPowerW 
         function plotRequiredTXPower2D(this, req_power)       
-           imagesc(this.cc.gx(1,:), this.cc.gy(:,1), req_power);
+           imagesc(this.cc.gx(1,:), this.cc.gy(:,1), req_power');
            set(gca, 'YDir', 'normal');
            c = colorbar;
            c.Label.String = 'Expected Required TX Power, W';
@@ -320,15 +313,15 @@ classdef PredictedChannel < handle
             
             diffs = zeros(obs_count);
             for i = 1:obs_count
-               row = sqrt(sum((this.obsGridPoss - this.obsGridPoss(i,:)).^2,2));
+               row = sqrt(sum((this.obsPos - this.obsPos(i,:)).^2,2));
                diffs(i,:) = row;
             end
-            cov = this.cp.sigmaSH^2*exp(-diffs/this.scaledBeta());
+            cov = this.cp.sigmaSH^2*exp(-diffs/this.beta());
         end
         
         function cov = varPosWithObs(this, pos)
-            diffs = sqrt(sum((this.obsGridPoss - pos).^2,2));
-            cov = this.cp.sigmaSH^2*exp(-diffs/this.scaledBeta());
+            diffs = sqrt(sum((this.obsPos - pos).^2,2));
+            cov = this.cp.sigmaSH^2*exp(-diffs/this.beta());
         end
         
         function mean = posteriorExpecteddB(this, pos)
@@ -338,8 +331,7 @@ classdef PredictedChannel < handle
         end
         
         function estimatePLParams(this)
-            res = this.cc.res;
-            obs_distances = sqrt(sum((this.obsGridPoss - (this.cp.qBase*res)).^2, 2))/res;
+            obs_distances = sqrt(sum((this.obsPos - (this.cp.qBase)).^2, 2));
             est_PL_par = polyfit2D(obs_distances, this.obsVals);
             this.kPl_est = est_PL_par(1);
             this.nPl_est = est_PL_par(2);
@@ -352,19 +344,14 @@ classdef PredictedChannel < handle
             % larger distances
             global weight_filter
             weight_filter = 1;
-            res = this.cc.res;
             [M,N] = size(this.cc.gx);
             per = this.obsCount/(M*N);
             [this.alpha_est, this.beta_est, this.rho_est] = SHMP_par_estimation(...
-                this.obsGridPoss(:,1), this.obsGridPoss(:,2), this.obsDiff, 1/res, per, 40, 5);
+                this.obsPos(:,1), this.obsPos(:,2), this.obsDiff, 1, per, 40, 5);
             fprintf('Estimated SH and MP params with %.2f %% samples\n', per*100);
             fprintf('alpha: %.2f\n', this.alpha_est);
             fprintf('beta: %.2f\n', this.beta_est);
             fprintf('rho: %.2f\n', this.rho_est);
-        end
-        
-                function b_res = scaledBeta(this)
-           b_res = this.beta()*this.cc.res; 
         end
         
         function b = beta(this)
