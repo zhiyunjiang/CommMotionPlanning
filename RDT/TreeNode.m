@@ -17,6 +17,7 @@ classdef TreeNode < handle
         children = [];
         isRoot = 0;
         distToHere = Inf;
+        isPropagating = 0;
         
         problemData;
     end
@@ -63,7 +64,16 @@ classdef TreeNode < handle
                 %otherwise assume it's just the line between them
                 this.pathFromParent = [parent.getPos(); this.getPos()];
             end
-         end
+        end
+        
+        function setDist(this, new_dist)
+            
+            if new_dist < 0
+                error("Distance must always be non-negative");
+            else
+                this.distToHere = new_dist;
+            end
+        end
           
         function root = getRootNode(this)
             node = this;
@@ -137,13 +147,12 @@ classdef TreeNode < handle
         function updateDist(this, parent_dist, dist_btwn)
             if isnan(parent_dist) || parent_dist == Inf || parent_dist < 0 || ...
                isnan(dist_btwn) || dist_btwn == Inf || dist_btwn < 0
-                error("Distance must be non-negative, finite number. Something went wrong...");
+                error("Distance must be non-negative, finite number.");
             end
             
             if this.distToHere == Inf
                 %we've just connected, we have no children!
-               this.distToHere = parent_dist + dist_btwn;
-            
+                this.setDist(parent_dist + dist_btwn);
             else
                 diff = this.distToHere - (parent_dist + dist_btwn);
                 this.propogateDiff(diff);
@@ -155,10 +164,17 @@ classdef TreeNode < handle
         %TODO - update to take into account the problem instance's distance
         %metric. Should only need to be calculated for rewire
         function propogateDiff(this, diff)
-            this.distToHere = this.distToHere - diff;
+            if this.isPropagating
+                error('Cycle detected in tree.');
+            end
+            this.isPropagating = 1;
+            %avoid some very smoll rounding issues
+            this.setDist( max(0,this.distToHere - diff) );
+
             for i = 1:length(this.children)
                 this.children(i).propogateDiff(diff);
             end
+            this.isPropagating = 0;
         end
     end
 end

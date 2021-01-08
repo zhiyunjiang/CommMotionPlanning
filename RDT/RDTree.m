@@ -159,14 +159,13 @@ classdef RDTree < handle
                 %want path from from  neighbor to current
                 path = pppi.getSLPath(neighbor.wrkspcpos, x_current);
                 
+                %check to make sure there's nothing obstructing
                 viable_path = pppi.collisionFree(path);
                 if norm(size(viable_path) - size(path)) == 0
                     %full path works!
                     cost_btwn(i) = this.theta*pppi.pathCost(new_node, neighbor, path, 1);
                     cost_to_new_via_neighbor = cost_btwn(i) + neighbor.distToHere;
-                    if cost_to_new_via_neighbor < min_cost
-                        %check if path is viable
-                        %check to make sure there's nothing obstructing
+                    if cost_to_new_via_neighbor < min_cost              
                            best_path = path;
                            best_neighbor = neighbor;
                            min_cost = cost_to_new_via_neighbor;
@@ -175,9 +174,6 @@ classdef RDTree < handle
                 end
             end
             
-            %handle case where we have resampled and are rewiring the
-            %resampled point. In this case, the "new" node will have a
-            %parent
             if ~new_node.isRoot
                 new_node.setParent(best_neighbor, min_cost_btwn, best_path); 
             end
