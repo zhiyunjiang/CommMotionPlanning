@@ -387,7 +387,8 @@ classdef CommChannel < handle
         end
         
         function plotDoubleConnectField(this, field, field_title)
-            imagesc(this.gx(1,:), this.gy(:,1), field);
+            %imagesc is a weird one. Tranpose field before plotting
+            imagesc(this.gx(1,:), this.gy(:,1), field');
             set(gca, 'YDir', 'normal');
             title(field_title);
             fnt_size = 12;

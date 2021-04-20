@@ -24,14 +24,4 @@ function rshandle = plotComAwareRRT(pppi,q1, q2)
     end
 end
 
-function scatter_handle = plotRS(q)
-    marker_edge_color = 'k';
-    marker_face_color = [1,0,1];
-    marker_size = 90;
-    hold on
-    scatter_handle = scatter(q(1), q(2), marker_size, '^', 'filled', ...
-                            'MarkerEdgeColor', marker_edge_color,...
-                            'MarkerFaceColor', marker_face_color ,...
-                            'DisplayName', 'Remote Station');
-end
 

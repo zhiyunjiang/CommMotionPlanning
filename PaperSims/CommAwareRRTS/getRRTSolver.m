@@ -6,7 +6,6 @@
 % rrt_solver - the rrt_solver object used to solve a path planning problem
 %               instance
 
-
 function rrt_solver = getRRTSolver()
 
     %stopping criteria

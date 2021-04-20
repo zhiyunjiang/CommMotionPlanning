@@ -107,7 +107,7 @@ classdef ChannelAnalyzer < handle
         
         
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % NoConnectionPrior
+        % NoConnectionMarginal
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % Find the marginal pronability of no connection at a point
         % Input:
@@ -173,11 +173,11 @@ classdef ChannelAnalyzer < handle
         %
         % Output:
         % exp_dist - Expected first passage distance
-        function exp_dist = ExpectedFPD(this, path, method)
+        function exp_dist = ExpectedFPD(this, path, method, J_S)
             if nargin == 2
                 method = 1;
             end
-           [approx_PMF, distances] = ApproxFPDPMF(this, path, method);
+           [approx_PMF, distances] = ApproxFPDPMF(this, path, method, J_S);
            exp_dist = approx_PMF'*distances;
         end
         
@@ -195,16 +195,33 @@ classdef ChannelAnalyzer < handle
         % approx_PMF - Probability mass at each distance
         % distances - distance associated with each probability mass in
         %               approx_PMF. First value is always 0.
-        function [approx_PMF, distances] = ApproxFPDPMF(this, path, method)
+        function [approx_PMF, distances] = ApproxFPDPMF(this, path, method, J_S)
             if nargin == 2
                 method = 1;
             end
             
            if method == 1
-               [approx_PMF, distances] = this.FPDPMFStraightline(path);
+               [approx_PMF, distances] = this.FPDPMFStraightline(path, J_S);
            else
                [approx_PMF, distances] = this.FPDPDFStraightlineNoMP(path);
            end
+        end
+        
+        function J = JNext(this, J_prev, x_next, seg_dist)
+            J = this.ItterativeJNextFromPoint(J_prev, x_next, seg_dist);
+        end
+        
+        function J_0 = J0(this, root)
+            %Approximate integral from -Inf to Inf  of P(gamma_PL + gamma_SH + gamma_MP < gamma_TH)
+            %using recursive J formulation as in Arjun's paper
+            gamma_pl_root = this.commChannel.getGammaPLdBAtPt(root);
+            J_0 = normpdf(this.gammaSHVec, 0, this.channelParams.sigmaSH)...
+                .*this.mpCDF(this.gammaTH - gamma_pl_root - this.gammaSHVec);
+        end
+        
+        function result = IntegrateJ(this, J)
+            %estimate integral using Riemann sum
+            result = sum(J)*this.delU;
         end
         
         
@@ -271,14 +288,6 @@ classdef ChannelAnalyzer < handle
             
         end
         
-        function J_0 = J0(this, root)
-            %Approximate integral from -Inf to Inf  of P(gamma_PL + gamma_SH + gamma_MP < gamma_TH)
-            %using recursive J formulation as in Arjun's paper
-            gamma_pl_root = this.commChannel.getGammaPLdBAtPt(root);
-            J_0 = normpdf(this.gammaSHVec, 0, this.channelParams.sigmaSH)...
-                .*this.mpCDF(this.gammaTH - gamma_pl_root - this.gammaSHVec);
-        end
-        
         function J_next = ItterativeJNextFromPoint(this, J_prev, point, step_size)
             gamma_pl = this.commChannel.getGammaPLdBAtPt(point);
            J_next = this.ItterativeJNext(J_prev, gamma_pl, step_size); 
@@ -304,19 +313,22 @@ classdef ChannelAnalyzer < handle
                 .*this.mpCDF(this.gammaTH - gamma_pl - this.gammaSHVec);
         end
         
-        function result = IntegrateJ(this, J)
-            %estimate integral using Riemann sum
-            result = sum(J)*this.delU;
-        end
+
         
-        function [p_no_conn_to_here, d] = NoConnAlongSL(this, path)
+        function [p_no_conn_to_here, d] = NoConnAlongSL(this, path, J_S)
             path_dim = length(path);
             if min(size(path)) == 1
                 path_dim = 1;
             end
             p_no_conn_to_here = zeros([path_dim, 1]);
             d = zeros([path_dim, 1]);
-            J_0 = this.J0(path(1,:));
+            
+            if nargin ==3%allow us to start with an arbitrary J
+                J_0 = J_S;
+            else
+                J_0 = this.J0(path(1,:));
+            end
+            
 
             p_no_conn_to_here(1) = this.IntegrateJ(J_0);
             d(1) = 0;
@@ -331,9 +343,9 @@ classdef ChannelAnalyzer < handle
             p_no_conn_to_here = p_no_conn_to_here/p_no_conn_to_here(1);
         end
         
-        function [g, d] = FPDPMFStraightline(this, path)
+        function [g, d] = FPDPMFStraightline(this, path, J_S)
             
-           [p_no_conn_to_here, d] = this.NoConnAlongSL(path);
+           [p_no_conn_to_here, d] = this.NoConnAlongSL(path, J_S);
             
             g = [0; p_no_conn_to_here(1:end-1) - p_no_conn_to_here(2:end)];
         

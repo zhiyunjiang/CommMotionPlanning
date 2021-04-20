@@ -15,9 +15,9 @@ classdef StopCriteria < handle
         
         function do_stop = stop(o, elapsed_time, iteration_count, BSF)
             do_stop = 0;
-            if (BSF.distToHere < Inf) || (o.solutionNotRequired)
-               if (iteration_count > o.maxIterations && o.maxIterations > 0 )...
-                       || (elapsed_time > o.maxRunTime && o.maxRunTime > 0 )
+            if (~isempty(BSF) && BSF.distToHere < Inf) || (o.solutionNotRequired)
+               if (iteration_count > o.maxIterations && o.maxIterations >= 0 )...
+                       || (elapsed_time > o.maxRunTime && o.maxRunTime >= 0 )
                   do_stop = 1; 
                end
             end

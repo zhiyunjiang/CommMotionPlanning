@@ -8,6 +8,14 @@
 
 classdef PathPlanningProblem < matlab.mixin.Copyable
     
+    properties (Access = public)
+        %ObstacleModule - abstraction of obstacles. Must implement
+        %CollisionFree(p1,p2)->{T,F}. Checks to see if the path from p1 to
+        %p2 is collision free. May also implement a plot() method
+        obstacleMod;  
+    end
+    
+    
     properties (Access = private)
         %region = [x_max x_min y_max y_min]; Raw coordinates from problem
         region;
@@ -35,12 +43,7 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
         %goalRegion - GoalRegion object. The set of points to which the
         %robot is heading. 
         goalRegion;
-        
-        %ObstacleModule - abstraction of obstacles. Must implement
-        %CollisionFree(p1,p2)->{T,F}. Checks to see if the path from p1 to
-        %p2 is collision free. May also implement a plot() method
-        obstacleMod;
-        
+                
         %costFunction - maps two points (n1, n2) to the cost between
         %them. n1, n2 are TreeNode objects.
         costFunction;
@@ -245,10 +248,10 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         % getGridNeighbors
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % Finds directly reachable neighbors of a grid point
+        % Finds directly reachable neighbors of a point
         % Input:
         % this - reference to the PathPlanningProblem object
-        % grd_pt - point [x,y] in grid coordinates. 
+        % pt - point [x,y] in workspace coordinates. 
         %
         % Output:
         % neighbors - neighboring grid points (up to 8). Excludes neighbors
@@ -260,15 +263,17 @@ classdef PathPlanningProblem < matlab.mixin.Copyable
            offsets = [[0,1];[1,0];[-1, 0];[0, -1];[1,1];[1, -1];[-1, -1];[-1, 1]];
            for i=1:length(offsets)
               neighbor = grd_pt + offsets(i,:); 
-              if this.gridPtInRegion(neighbor)
+              if this.ptInRegion(this.toRawCoordinate(neighbor))
                   %now check for obstacles
-                  sub_path = this.collisionFree([grd_pt; neighbor]);
+                  sub_path = this.collisionFree(this.toRawCoordinate([grd_pt; neighbor]));
                   if sum(size(sub_path)) == 4  
                     neighbors = [neighbors; neighbor]; 
                   end
               end
            end
-           neighbors = this.toRawCoordinate(neighbors);
+           if ~isempty(neighbors)
+               neighbors = this.toRawCoordinate(neighbors);
+           end
         end
        
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

@@ -48,13 +48,16 @@ classdef ObstacleFactory
             end
         end
         
-        function obs_mod = circleGrid(r_base, r_plus_max, pos_rng, start, dest)
+        function obs_mod = circleGrid(r_base, r_plus_max, pos_rng, start, dest, scale)
+            if nargin <=5
+                scale = 1;
+            end
             valid = 0;
             while ~valid
-                circle_grid = [CircObs(randi(r_plus_max)+r_base, [10,40] + randi(pos_rng,[1,2])), CircObs(randi(r_plus_max)+r_base, [25, 10] + randi(pos_rng,[1,2])),...
-                    CircObs(randi(r_plus_max)+r_base, [25,25] + randi(pos_rng,[1,2])), CircObs(randi(r_plus_max)+r_base, [25, 40] + randi(pos_rng,[1,2])),...
-                    CircObs(randi(r_plus_max)+r_base, [40,10] + randi(pos_rng,[1,2])), CircObs(randi(r_plus_max)+r_base, [40, 25] + randi(pos_rng,[1,2])),...
-                    CircObs(randi(r_plus_max)+r_base, [40,40] + randi(pos_rng,[1,2]))];
+                circle_grid = [CircObs(r_plus_max*rand()+r_base, scale*[10,40] + pos_rng*(rand([1,2])-0.5) ), CircObs(r_plus_max*rand()+r_base, scale*[25, 10] + pos_rng*(rand([1,2])-0.5)),...
+                    CircObs(r_plus_max*rand()+r_base, scale*[25,25] + pos_rng*(rand([1,2])-0.5)), CircObs(r_plus_max*rand()+r_base, scale*[25, 40] + pos_rng*(rand([1,2])-0.5)),...
+                    CircObs(r_plus_max*rand()+r_base, scale*[40,10] + pos_rng*(rand([1,2])-0.5)), CircObs(r_plus_max*rand()+r_base, scale*[40, 25] + pos_rng*(rand([1,2])-0.5)),...
+                    CircObs(r_plus_max*rand()+r_base, scale*[40,40] + pos_rng*(rand([1,2])-0.5))];
 
                 obs_mod = ObstacleMod(circle_grid);
                 if obs_mod.collisionFree(start, start) && obs_mod.collisionFree(dest, dest)
@@ -76,6 +79,13 @@ classdef ObstacleFactory
                 CircObs(4, [29, 29]), CircObs(3.5, [38,38]),...
                 CircObs(4, [43, 21]), CircObs(4, [21, 13]),...
                 CircObs(3.5, [39,11])];
+            obs_mod = ObstacleMod(obstacles);
+        end
+        
+        function obs_mod = slide1()
+            obstacles = [CircObs(2.8, [5, 19.5]), CircObs(2.4, [8,9]), ...
+                CircObs(2.5, [13, 16.5]), CircObs(3, [21, 6]),...
+                CircObs(1.8, [20, 20]), CircObs(1.4, [18, 12.5])];
             obs_mod = ObstacleMod(obstacles);
         end
     end

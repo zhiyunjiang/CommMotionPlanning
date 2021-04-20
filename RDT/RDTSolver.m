@@ -15,6 +15,7 @@ classdef RDTSolver < handle
         %rdTree - The tree being built out
         rdTree;
         
+        
     end
     
     methods (Access = public)
@@ -47,6 +48,26 @@ classdef RDTSolver < handle
                     if elapsed_time > time_for_next_recording
                         time_for_next_recording = time_for_next_recording + series_delta;
                        this.rdTree.recordBSFCost(elapsed_time); 
+                    end
+                    
+                    bsf = this.getBSF();
+                    if bsf.distToHere ~= Inf
+                        neat = 1;
+                    end
+                    
+                    if iteration_count == 100 || iteration_count == 1000 || iteration_count == 2000 || iteration_count == 5000
+                        n_nodes = length(this.rdTree.treeNodes);
+                        
+                        rut = this.getRoot();
+                        rut.plotTree('k');
+                        bsf = this.getBSF();
+                        if bsf.distToHere ~= Inf
+                            hold on
+                            bsf.pathToRoot(1);
+                        end
+                        hold on
+                        pppi.plotProb();
+                        yeppers = 1;
                     end
                 end
             end

@@ -1,4 +1,5 @@
-classdef RDTree < handle
+%non-additive RD tree
+classdef NARDTree < handle
     
     properties
         %doRewire - if true, will rewire, that is, will run RRT* rather
@@ -137,6 +138,7 @@ classdef RDTree < handle
             radius = min(this.steerRad, this.gamma*sqrt(log(cardV)/cardV));
             neighbors = this.near(new_node.wrkspcpos, radius);
             
+            
             cost_btwn = -1*ones(size(neighbors));
             x_current = new_node.wrkspcpos;
             if new_node.isRoot
@@ -198,7 +200,25 @@ classdef RDTree < handle
         end
           
         function path = steer(this, x_rand, v_nearest, pppi)
-            path = steer(this.steerRad, x_rand, v_nearest.wrkspcpos, pppi);
+
+            start = v_nearest.wrkspcpos;
+            diff = x_rand - start;
+            %don't extend beyond the newly sampled point
+            if norm(diff) > this.steerRad
+            
+                %find the direction
+                phi = atan2(diff(2), diff(1));
+
+                new_diff = [this.steerRad*cos(phi), this.steerRad*sin(phi)];
+                new = start + new_diff;
+                %snap to grid
+                new = pppi.toRawCoordinate(pppi.toGridCoordinate(new));
+            else
+               new =  x_rand;
+            end
+            
+           path = pppi.getSLPath(start, new);
+            
         end
         
         function neighbors = near(this, pt, radius)
@@ -215,6 +235,9 @@ classdef RDTree < handle
         % TODO - implement with balanced box decomposition (space O(n), 
         % time O(log(n))) or boxed (space = grid_x_dim * grid_y_dim, time O(1))
         %currently is O(n) (brute force)
+        
+        % Aslo, not sure we need to do this AND the rewire routine. Prollay
+        % just need the rewire. Will investigate in a hot min tho.
         function [nearest, min_dist] = nearest(this, x_rand)
             root = this.treeNodes(1);
             min_dist = norm(root.getPos() - x_rand);

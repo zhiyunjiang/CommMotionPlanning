@@ -71,8 +71,10 @@ K_PL = -12.89;
 %              be ignored in the approximation.
 %              See the JOR paper (Section 6) for more details.
 
-alpha = 10;            
-beta = 2;            
+%alpha = 10;            
+alpha = 50;
+%beta = 2;            
+beta = 1.5;            
 N_sin = 5000;                    
 PSD_at_f_c = 30;                  
 
@@ -97,6 +99,7 @@ ss_decorr = 0.05;
 res = 2/ss_decorr; 
 
 K_ric = 10;     
+     
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Generate the channel
@@ -115,6 +118,21 @@ fnt_siz = 25;
 
 f = figure;
 
+surf(g_x, g_y, gamma_PL_dB, 'EdgeColor','none');
+% light
+% shading interp
+xlabel('x (m)', 'FontSize', fnt_siz,  'FontWeight', 'bold');
+ylabel('y (m)', 'FontSize', fnt_siz,  'FontWeight', 'bold');
+zlabel('Received power (PL only) (dBm)','FontSize', fnt_siz ,  'FontWeight','bold');
+axis tight
+grid on
+set(gca, 'FontSize', fnt_siz, 'FontWeight', 'bold');
+
+maximize(f)
+
+
+
+f = figure;
 
 surf(g_x, g_y, gamma_TOT_dB, 'EdgeColor','none');
 % light
@@ -150,6 +168,19 @@ surf(g_x, g_y, gamma_SH_dB, 'EdgeColor','none');
 xlabel('x (m)', 'FontSize', fnt_siz,  'FontWeight', 'bold');
 ylabel('y (m)', 'FontSize', fnt_siz,  'FontWeight', 'bold');
 zlabel('Received power (SH only) (dBm)','FontSize', fnt_siz,  'FontWeight','bold');
+axis tight
+grid on
+set(gca, 'FontSize', fnt_siz, 'FontWeight', 'bold');
+
+maximize(f)
+
+f = figure;
+surf(g_x, g_y, gamma_TOT_dB - gamma_PL_SH_dB, 'EdgeColor','none');
+% light
+% shading interp
+xlabel('x (m)', 'FontSize', fnt_siz,  'FontWeight', 'bold');
+ylabel('y (m)', 'FontSize', fnt_siz,  'FontWeight', 'bold');
+zlabel('Received power (MP only) (dBm)','FontSize', fnt_siz ,  'FontWeight','bold');
 axis tight
 grid on
 set(gca, 'FontSize', fnt_siz, 'FontWeight', 'bold');

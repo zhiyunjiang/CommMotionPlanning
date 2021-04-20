@@ -21,8 +21,8 @@ function grid_pt = toGridFromRaw(region, res, raw_pt)
     if res == Inf% just offset so that min is 1, 1
         grid_pt = raw_pt - [region(2), region(4)] + 1;
     else
-        xGMax = ceil( (region(1) - region(2))*res);
-        yGMax = ceil( (region(3) - region(4))*res);
+        xGMax = ceil( (region(1) - region(2))*res)+1;
+        yGMax = ceil( (region(3) - region(4))*res)+1;
         xG = min(round((raw_pt(:,1) - region(2)).*res) + 1, xGMax);
         yG = min(round((raw_pt(:,2) - region(4)).*res) + 1, yGMax);
         grid_pt = [xG,yG];
