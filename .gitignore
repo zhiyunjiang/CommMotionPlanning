@@ -4,3 +4,4 @@ figs/**
 arjun_python/**
 *.asv
 *.mat
+__pycache__/

@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 path = Path(__file__)
 top_dir = path.parent.parent
-sys.path.insert(0, str(top_dir.absolute())+"\\utils")
+sys.path.insert(0, str(top_dir.absolute())+"/utils")
 from CoordTransforms import toRawFromGrid
 from CoordTransforms import toGridFromRaw
 import ChannelSim as ChSim
