@@ -28,7 +28,7 @@ void list_from_polygons(Polygon_list& partition_list, std::vector<PyList>& verti
 		//iterate over the polygon's vertices
 		PyList pVerts;
 		for (Point_2 p : poly.container()) {
-			//format as tuple
+			//format as pair
 			std::pair<float, float> py_pt (p.x(), p.y());
 			//push onto vector
 			pVerts.push_back(py_pt);

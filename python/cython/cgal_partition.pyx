@@ -26,8 +26,6 @@ def hertel_mehlhorn(vertices):
 cdef PyList py_to_cpp_verts(verts):
 	cdef PyList cverts;
 	for vert in verts:
-		#pr = pair[float, float](float vert[0], float vert[1])
-		#pr = (float vert[0], float vert[1])
 		cverts.push_back(vert)
 		
 	return cverts

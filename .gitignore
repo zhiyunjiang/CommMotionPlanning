@@ -5,3 +5,5 @@ arjun_python/**
 *.asv
 *.mat
 __pycache__/
+.*
+!/.gitignore
