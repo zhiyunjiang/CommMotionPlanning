@@ -14,6 +14,8 @@ import cgal_partition
 #Raman-Douglas-Peucker algo
 from rdp import rdp
 
+#triangulation that can handle holes
+import triangle
 
 
 class PointCloud():
@@ -75,7 +77,7 @@ class PointCloud():
 			poly.make_cc()
 			poly.reduce()
 			poly.partition(algo = algo)
-			n_subregions += len(poly.cnvx_polys)
+			n_subregions += len(poly.cnvx_partition)
 
 		print('%d total subregions'%(n_subregions))
 		
@@ -244,10 +246,37 @@ class Poly:
 		return pstr
 		
 	def contains_point(self, pt):
-		return point_in_poly(self.points, pt)
+		in_poly =  point_in_poly(self.points, pt)
+		in_hole = False
+		if in_poly:
+			for hole in self.holes:
+				in_hole = hole.contains_point(pt)
+				if in_hole:
+					break
+		return (in_poly and not in_hole)
+		
 		
 	def area(self):
-		return poly_area(self.points)
+		area = poly_area(self.points)
+		for hole in holes:
+			area -= hole.area()
+		return area
+		
+	def is_convex(self):
+		return len(self.get_reflex_vertices()) == 0
+		
+	def get_reflex_vertices(self):
+		self.make_cc()
+		n = len(self.points)
+		reflex=[]
+		for i in range(n):
+			a = self.points[i]
+			b = self.points[(i+1)%n]
+			c = self.points[(i+2)%n]
+			if not is_ccw(a,b,c):
+				reflex.append(self.points[(i+1)%n])
+				
+		return reflex
 		
 	def add_hole(self, other):
 		if self == other:
@@ -258,57 +287,131 @@ class Poly:
 			other.is_interior = True
 		
 	def partition(self, algo=0):
-		if algo == 0:
-			self.cnvx_polys = cgal_partition.optmal_convex_parition(self.points)
-		elif algo == 1:
-			self.cnvx_polys = cgal_partition.greene_approx_convex_partition(self.points)		
-		elif algo == 2:
-			self.cnvx_polys = cgal_partition.hertel_mehlhorn(self.points)				
-			
-		#also partition the holes
+		
+		#simplify holes before partitioning
 		for hole in self.holes:
 			hole.make_cc()
 			hole.reduce()
+		
+		if algo == 0:
+			points_list = cgal_partition.optmal_convex_parition(self.points)
+			self.cnvx_partition = [Poly(points) for points in points_list]
+		elif algo == 1:
+			points_list = cgal_partition.greene_approx_convex_partition(self.points)		
+			self.cnvx_partition = [Poly(points) for points in points_list]
+		elif algo == 2:
+			points_list = cgal_partition.hertel_mehlhorn(self.points)
+			self.cnvx_partition = [Poly(points) for points in points_list]
+		elif algo == 4:
+			self.cnvx_partition = self.hertel_mehlhorn()
+		elif algo == 5:
+			self.cnvx_partition = self.triangulate()
+			
+		#also partition the holes
+		for hole in self.holes:
 			hole.partition(algo)
-			
-	def get_interior_point(self):
-		p0 = self.points[0]
-		p1 = self.points[1]
-		p2 = self.points[2]
-		a1 = p0 - p1
-		a2 = p2 - p1
-		theta = (np.arctan2(a1[1], a1[0]) + np.arctan2(a2[1], a2[0]))/2
-		v = np.array([np.cos(theta), np.sin(theta)])
-		r = 0.001
 		
-		pi = p1 + r*v
-		
-		if not self.contains_point(pi):
-			pi = p1 - r*v
-			if not self.contains_point(pi):
-				print('WARNING: get_interior_point did not get an interior point')
-		return pi
-			
-	def hertel_mehlhorn(self):
-		#first, triangulate
+	def triangulate(self):
+		#create the data structure required by the triangle library
 		n = len(self.points)
 		points = self.points
 		edges = [[i, (i+1)%n] for i in range(n)]
 		hole_pts = []
-		for hole in holes:
+		for hole in self.holes:
 			offset = len(points)
 			hn = len(hole.points)
 			edges += [[i+offset, ((i+1)%n) + offset] for i in range(hn)]
 			points = np.concatenate((points, hole.points), axis=0)
 			hole_pts.append(hole.get_interior_point())
 			
-				
-		tri_dict = {'vertices': points, 'segments':edges, 'holes': holes  }
-		t = triangulate(tri)
+		tri_dict = {'vertices': points, 'segments':edges}
+		if len(self.holes) > 0:
+			tri_dict['holes'] = hole_pts 
+
+		#triangulate with the triangle package
+		t = triangle.triangulate(tri_dict)
 		t_verts = t['vertices'].tolist()
 		tris = t['triangles'].tolist()
-		return [Poly(np.array(t_verts[tri])) for tri in tris]
-	
+		partition = [Poly(np.array([t_verts[vi] for vi in tr])) for tr in tris]
+
+		#remove triangles corresponding to holes/areas outside of the polygon
+		filtered = []
+		for poly in partition:
+			pt = poly.get_interior_point()
+			if self.contains_point(pt):
+				filtered.append(poly)
+		return filtered
+			
+	def hertel_mehlhorn(self):
+		#first, triangulate
+		partition = self.triangulate()
+		
+		#now for the actual HM
+		
+		#Setup data structures need for HM
+		edges = []
+		edge_2_poly={}
+		fixed_edges = self.edges()
+		for hole in self.holes:
+			fixed_edges += hole.edges()
+		
+		for i in range(len(partition)):
+			poly = partition[i]
+			for edge in poly.edges():
+				if edges not in fixed_edges:
+					if edge in edges:
+						edge_2_poly[edges.index(edge)].append(i)
+					else:
+						idx = len(edges)
+						edges.append(edge)
+						edge_2_poly[idx] = [i]
+						
+		#Now cycle through edges and remove what we can
+		removing_edges = True
+		mask = [i for i in range(len(edges))]
+		while removing_edges:
+			new_mask = []
+			for m in mask:
+				did_merge = False
+				edge = edges[m]
+				polys = [partition[i] for i in edge_2_poly[m]]
+				if len(polys) ==2 : 
+					poly0 = polys[0]
+					poly1 = polys[1]
+					e_0 = poly0.edges()
+					e_1 = poly1.edges()
+					idx0 = e_0.index(edge)
+					idx1 = e_1.index(edge)
+					plyc0  = PolyConstructor(np.roll(poly0.points, len(poly0.points)-idx0-1, axis=0))
+					plyc1  = PolyConstructor(np.roll(poly1.points, len(poly1.points)-idx1-1, axis=0))
+					
+					assert plyc0.try_merge(plyc1), 'Merge should always be succesful as polys share an edge'
+					new_poly = Poly(plyc0.points)
+					if new_poly.is_convex():
+						did_merge = True
+						poly0.points = new_poly.points
+						#Have edges that linked to poly1 link to updated poly0
+						partition[edge_2_poly[m][1]] = poly0
+					if not did_merge:
+						new_mask.append(m)
+						
+			if len(new_mask) == len(mask):
+				removing_edges = False
+			else:
+				mask = new_mask
+		#remove duplicate objects
+		partition = list(set(partition))
+		
+		return partition
+		
+	def edges(self):
+		eds = []
+		n = len(self.points)
+		for i in range(n):
+			eds.append( Poly.Edge(self.points[i], self.points[(i+1)%n]) ) 
+		return eds	
+
+
 	def reduce(self, eps=0.1):
 		#rdp might actually handle pruning colinear points for us
 		# but it seems to give us a marginal speedup, so leaving in for now
@@ -335,14 +438,31 @@ class Poly:
 			else:
 				i += 1
 				pruning = (i < n)
+	
+			
+	def get_interior_point(self):
+		p0 = self.points[0]
+		p1 = self.points[1]
+		p2 = self.points[2]
+		a1 = p0 - p1
+		a2 = p2 - p1
+		theta = (np.arctan2(a1[1], a1[0]) + np.arctan2(a2[1], a2[0]))/2
+		v = np.array([np.cos(theta), np.sin(theta)])
+		r = 0.001
+		
+		pi = p1 + r*v
+		
+		if not self.contains_point(pi):
+			pi = p1 - r*v
+			if not self.contains_point(pi):
+				print('WARNING: get_interior_point did not get an interior point')
+		return pi
 
 
 	def plot(self, show_partition = True):
-		if show_partition and self.cnvx_polys is not None:
-			#plot each one
-			for cnvx in self.cnvx_polys:
-				points = np.concatenate((cnvx, [cnvx[0]]), axis=0)
-				plt.plot(points[:,0], points[:,1])
+		if show_partition and self.cnvx_partition is not None:
+			for cnvx in self.cnvx_partition:
+				cnvx.plot(show_partition)
 		else:
 			plot_points = self.points
 			p0 = self.points[0]
@@ -360,7 +480,34 @@ class Poly:
 	def _signed_area(self):
 		area = _signed_area(self.points)
 		return area
+		
+	#Auxillary data structure for Hertel-Mehlhorn algorithm
+	class Edge:
+	
+		def __init__(self, p0, p1):
+			#enfore point order
+			p0o = p0
+			p1o = p1
+			if p0[0]> p1[0] or (p0[0] == p1[0] and p0[1] > p1[1]):
+				p0o = p1
+				p1o = p0
+				
+			
+			self.points=np.array([p0o, p1o])
+		def __str__(self):
+			return 'Poly.Edge: ' + str(self.points)
+			
+		def __eq__(self, obj):
+			is_equal = False
+			if isinstance(obj, Poly.Edge):
+				dif = self.points - obj.points
+				is_equal = np.sum(abs(dif)) == 0					
+			return is_equal
+	
 
+
+#Exposing several geometry related functions which may be useful in general
+#May make more sense to move these to a separate file
 
 
 def colinear(p0, p1, p2):
