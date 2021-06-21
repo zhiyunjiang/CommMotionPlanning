@@ -8,6 +8,7 @@ from pathlib import Path
 path = Path(__file__)
 top_dir = path.parent.parent
 sys.path.insert(0, str(top_dir.absolute())+"\\utils")
+sys.path.insert(0, str(top_dir.absolute())+"\\geometry")
 sys.path.insert(0, str(top_dir.absolute())+"\\polling_systems")
 sys.path.insert(0, str(top_dir.absolute())+"\\comm_channel")
 #So we can import my local libs
@@ -16,14 +17,15 @@ import PollingSystem as PS
 import MarkovianRP as MRP
 from CoordTransforms import toRawFromGrid
 from CoordTransforms import toGridFromRaw
+import pointcloud as PC
 
 #Delay-Tolerant Relay System
 class DTR:
 
-	#eventually, Beta should be calculated from comm specifications
+	#TODO eventually, Beta should be calculated from comm specifications
 	def __init__(self, channels, ls, beta, th = -92):
 		assert len(channels)%2 == 0, "Expected even number of channels"
-		assert len(channels) == 2*len(ls), "Mismatch: number of regions and nuber of queue parameters"
+		assert len(channels) == 2*len(ls), "Mismatch: number of regions and number of queue parameters"
 
 		self.n = len(ls)
 		self.region = channels[0].region
@@ -31,6 +33,9 @@ class DTR:
 		self.cfs = [cc.getConnectionField(th) for cc in channels]
 		self.cfields = [(i+1)*(self.cfs[2*i]*self.cfs[2*i+1]) for i in range(len(ls))]
 		self.Xis = [_indices_to_pts(cf, self.region, self.res) for cf in self.cfields]
+		self.cregions = [ PC.PointCloud(Xi['points']) for Xi in self.Xis]
+		for pc in self.cregions:
+    			pc.partition(algo=4)
 		self.channels = channels
 		self.ps = PS.PollingSystem(ls, beta)
 

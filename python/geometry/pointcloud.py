@@ -4,14 +4,14 @@ import matplotlib.pyplot as plt
 
 #a few auxillary imports needed for cgal_partition
 import sys
-sys.path.insert(0, "../cython")
+sys.path.insert(0, "../cython")#Needed for cgal partitioning
 
 #CGAL imports
 from CGAL import CGAL_Alpha_shape_2 as CGAL_alphashape
 from CGAL.CGAL_Kernel import Point_2
 import cgal_partition
 
-#Raman-Douglas-Peucker algo
+#Ramer-Douglas-Peucker algo
 from rdp import rdp
 
 #triangulation that can handle holes
@@ -231,6 +231,7 @@ class PolyConstructor:
 class Poly:
 
 	def __init__(self, points, holes = None):
+		assert len(points) > 2, 'Tried to create a poly from point(s): ' + str(points)
 		self.points = points
 		if holes is None:
 			holes = []
@@ -244,6 +245,29 @@ class Poly:
 			pstr += ' (' +str(point) + ') '
 		pstr += 'Is Interior: ' + str(self.is_interior)
 		return pstr
+
+	#build the A matrix and b vector s.t. Ax-b < 0vec iff point in polygon		
+	def to_linear_constraints(self):
+		#only works if we're working with a convex polygon
+		if not self.is_convex():
+			return None
+			
+		#number of constraints equal to number edges
+		edges = self.edges()
+		ne = len(edges)
+		A = np.zeros((ne, 2))
+		b = np.zeros((ne, 1))
+		
+		pt = self.get_interior_point()
+		for i in range(ne):
+			Ai, bi = edges[i].as_constraint()
+			if Ai @ pt - bi >0:
+				Ai *= -1
+				bi *= -1
+			A[i] = Ai
+			b[i] = bi
+			
+		return (A, b)
 		
 	def contains_point(self, pt):
 		in_poly =  point_in_poly(self.points, pt)
@@ -492,8 +516,8 @@ class Poly:
 				p0o = p1
 				p1o = p0
 				
-			
 			self.points=np.array([p0o, p1o])
+			
 		def __str__(self):
 			return 'Poly.Edge: ' + str(self.points)
 			
@@ -503,7 +527,24 @@ class Poly:
 				dif = self.points - obj.points
 				is_equal = np.sum(abs(dif)) == 0					
 			return is_equal
-	
+			
+		def as_constraint(self):
+			p0 = self.points[0]
+			d = self.points[1] - p0
+
+			#x coords are identical, we're dealing with a vertical line
+			if d[0] == 0:
+				A = np.array([1,0])
+				b = p0[0]
+			elif d[1] == 0:
+				A = np.array([0,1])
+				b = p0[1]
+			else:
+				#ok this is just a normal guy
+				A = np.array([-1*d[1]/d[0], 1])
+				b = -1*( A @ p0)
+			return A, b
+				
 
 
 #Exposing several geometry related functions which may be useful in general
