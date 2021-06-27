@@ -217,7 +217,7 @@ class CommChannel:
                 plt.show()
 
         def plotConnectivityField(self, gamma_th):
-                conn_field = self.getConnectionField(p_th, gamma_th)
+                conn_field = self.getConnectionField(gamma_th)
                 title = 'Connected Regions for Gamma_th = %.2f dB'% (gamma_th)
                 plotConnectionField(self.region, conn_field, title)
 
@@ -250,218 +250,232 @@ class CommChannel:
                 title += ") (dB)"
                 return vals, title
 
-class PredictedChannel:
+class PredictedChannel(object):
 
-        def __init__(self, cp, region, res, obs_pos, obs_vals, use_estimates = False):
-                self.cp = cp
+	def __init__(self, cp, region, res, obs_pos, obs_vals, use_estimates = False):
+		self.cp = cp
 
-                self.region = region
-                self.res = res
+		self.region = region
+		self.res = res
 
-                # the rectangular region specifying the environment
-                x_max = self.region[0]
-                x_min = self.region[1]
-                y_max = self.region[2]
-                y_min = self.region[3]
+		# the rectangular region specifying the environment
+		x_max = self.region[0]
+		x_min = self.region[1]
+		y_max = self.region[2]
+		y_min = self.region[3]
 
-                if x_max <= x_min or y_max <= y_min:
-                        warnings.warn('Region\'s max values must be greater than its min values') 
+		if x_max <= x_min or y_max <= y_min:
+			warnings.warn('Region\'s max values must be greater than its min values') 
 
-                self.gx, self.gy = np.meshgrid(np.linspace(x_min,x_max, int( np.rint( (x_max-x_min)*res) ) ), \
-                np.linspace(y_min,y_max, int( np.rint((y_max-y_min)*res) )))
-
-
-                self.obsPos = obs_pos
-                self.obsVals = obs_vals
-                self.useEstimates = use_estimates
-                self.nObs = len(obs_vals)
-                #TODO - include code for parameter estiamtion based on observations
-                #       Currently will just use the true values contained in cp
-                self._obsPL = self.estimatePLdBAtPoint(self.obsPos)
-                self._obsDif = self.obsVals - self._obsPL
-                self._obsCov = self._calcObsCov()
-                self.UInv = np.linalg.inv(self._obsCov + self.rho()*np.eye(self.nObs))
-
-                self._setStats()
-
-        def estimatePLdBAtPoint(self, pts):
-                """
-                %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-                % estimatePLAtPoint
-                %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-                % Estimate the path loss gain at a point
-                % Input:
-                % self - reference to the PredictedChannel object
-                % pts - either a single point [x,y] or matrix of points 
-                %       [x1,y1;...xn,yn]. Assumes points are in raw coordinates
-                % Output:
-                % Returns the path loss gain in dB
-                """
-                bs = self.cp.qBase
-                pts = np.array(pts)
-
-                return self.kPL() - 10*self.nPL()*np.log10(np.sqrt(np.sum((bs - pts)**2, pts.ndim-1)))
-
-        def getConnectionField(self, p_th, gamma_th):
-                """
-                %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-                % getConnectionField
-                %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-                % Fetches a matrix representing a binary field with 1 indicating
-                % communication is possible and 0 indicating connection is not
-                % possible. This is based on a minimum required channel gain, which
-                % in turn can be calculated from other requirements (e.g. SNR, BER,
-                % etc...)
-                % Input:
-                % self - reference to the PredictedChannel object
-                % p_th - probability threshold. Since we're working with a
-                %           predicted channel, this is the probability that the
-                %           channel is good enough for communication
-                % gamma_th - the minimum required channel gain for communication
-                %
-                % Output:
-                % conn_field - matrix of the same dimension as the grid-scaled
-                %               workspace. Represents the binary connection field.
-                """
-                x_vals = self.gx[0,:]
-                y_vals = self.gy[:,0]
-                grd_sz = self.gx.shape
-                conn_field = np.zeros(np.flip(grd_sz))
-                for i in range(grd_sz[1]):
-                        for j in range(grd_sz[0]):
-                                conn_field[i,j] = self.posteriorPConn([x_vals[i], y_vals[j]], gamma_th) >= p_th
-                return conn_field
-
-        def posteriorPConn(self, pt, gamma_th):
-                """
-                %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-                % posteriorPConn
-                %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-                % Calculates the probability that the channel gain is above a giveb
-                % channel gain threshold in dB. Prediction based on Gaussian process
-                % Input:
-                % self - reference to the PredictedChannel object
-                % pt - a single point [x,y]
-                % gamma_th - the minimum required channel gain for communication
-                %
-                % Output:
-                % Returns the probability that the channel gain at pt is above
-                %           gamma_th
-                """
-                grid_pt = toGridFromRaw(self.region, self.res, pt)
-                mean = self.means[grid_pt[0], grid_pt[1]]
-                variance = self.vars[grid_pt[0], grid_pt[1]]
-
-                return 1 - scipy.stats.norm.cdf(gamma_th, mean, np.sqrt(variance))
+		self.gx, self.gy = np.meshgrid(np.linspace(x_min,x_max, int( np.rint( (x_max-x_min)*res) ) ), \
+		np.linspace(y_min,y_max, int( np.rint((y_max-y_min)*res) )))
 
 
-        def kPL(self):
-                if self.useEstimates:
-                        kPL = self.cp.kPL
-                        warnings.warn("Estimation not yet implemented")
-                else:
-                        kPL = self.cp.kPL
-                return kPL
+		self.obsPos = obs_pos
+		self.obsVals = obs_vals
+		self.useEstimates = use_estimates
+		self.nObs = len(obs_vals)
+		#TODO - include code for parameter estiamtion based on observations
+		#       Currently will just use the true values contained in cp
+		self._obsPL = self.estimatePLdBAtPoint(self.obsPos)
+		self._obsDif = self.obsVals - self._obsPL
+		self._obsCov = self._calcObsCov()
+		self.UInv = np.linalg.inv(self._obsCov + self.rho()*np.eye(self.nObs))
+		self._p_th = 0.85
+		self._setStats()
 
-        def nPL(self):
-                if self.useEstimates:
-                        nPL = self.cp.nPL
-                        warnings.warn("Estimation not yet implemented")
-                else:
-                        nPL = self.cp.nPL
-                return nPL
+	@property
+	def p_th(self):
+		return self._p_th
+		
+	def setPth(self, p):
+		assert 0<=p<=1, 'Probability threshold must be in [0,1]'
+		self._p_th = p
 
-        def rho(self):
-                if self.useEstimates:
-                        rho = self.cp.sigmaMP**2
-                        warnings.warn("Estimation not yet implemented")
-                else:
-                        rho = self.cp.sigmaMP**2
-                return rho
+	def estimatePLdBAtPoint(self, pts):
+		"""
+		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		% estimatePLAtPoint
+		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		% Estimate the path loss gain at a point
+		% Input:
+		% self - reference to the PredictedChannel object
+		% pts - either a single point [x,y] or matrix of points 
+		%       [x1,y1;...xn,yn]. Assumes points are in raw coordinates
+		% Output:
+		% Returns the path loss gain in dB
+		"""
+		bs = self.cp.qBase
+		pts = np.array(pts)
 
-        def beta(self):
-                if self.useEstimates:
-                        beta = self.cp.decorrSH
-                        warnings.warn("Estimation not yet implemented")
-                else:
-                        beta = self.cp.decorrSH
-                return beta
+		return self.kPL() - 10*self.nPL()*np.log10(np.sqrt(np.sum((bs - pts)**2, pts.ndim-1)))
 
-        def alpha(self):
-                if self.useEstimates:
-                        rho = self.cp.sigmaSH**2
-                        warnings.warn("Estimation not yet implemented")
-                else:
-                        alpha = self.cp.sigmaSH**2
-                return alpha
+	def getConnectionField(self, gamma_th):
+		"""
+		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		% getConnectionField
+		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		% Fetches a matrix representing a binary field with 1 indicating
+		% communication is possible and 0 indicating connection is not
+		% possible. This is based on a minimum required channel gain, which
+		% in turn can be calculated from other requirements (e.g. SNR, BER,
+		% etc...)
+		% Input:
+		% self - reference to the PredictedChannel object
+		% gamma_th - the minimum required channel gain for communication
+		%
+		% Output:
+		% conn_field - matrix of the same dimension as the grid-scaled
+		%               workspace. Represents the binary connection field.
+		"""
+		x_vals = self.gx[0,:]
+		y_vals = self.gy[:,0]
+		grd_sz = self.gx.shape
+		conn_field = np.zeros(np.flip(grd_sz))
+		for i in range(grd_sz[1]):
+			for j in range(grd_sz[0]):
+				conn_field[i,j] = self.posteriorPConn([x_vals[i], y_vals[j]], gamma_th) >= self.p_th
+		return conn_field
 
-        """
-        Plotting Functions
-        """
+	def posteriorPConn(self, pt, gamma_th):
+		"""
+		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		% posteriorPConn
+		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		% Calculates the probability that the channel gain is above a giveb
+		% channel gain threshold in dB. Prediction based on Gaussian process
+		% Input:
+		% self - reference to the PredictedChannel object
+		% pt - a single point [x,y]
+		% gamma_th - the minimum required channel gain for communication
+		%
+		% Output:
+		% Returns the probability that the channel gain at pt is above
+		%           gamma_th
+		"""
+		grid_pt = toGridFromRaw(self.region, self.res, pt)
+		mean = self.means[grid_pt[0], grid_pt[1]]
+		variance = self.vars[grid_pt[0], grid_pt[1]]
 
-        def plotConnectivityField(self, p_th, gamma_th):
-                """
-                %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-                % plotConnected2D
-                %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-                % Plots the binary connectivity field over the workspace given a
-                % minimum required channel gain and threshold probability.
-                % Input:
-                % self - reference to the PredictedChannel object
-                % p_th - probability threshold. Since we're working with a
-                %           predicted channel, this is the probability that the
-                %           channel is good enough for communication
-                % gamma_th - the minimum required channel gain for communication
-                """
-                conn_field = self.getConnectionField(p_th, gamma_th)
-                title = 'Connected Regions for Gamma_th = %.2f dB, p_th >= %.2f'% (gamma_th, p_th)
-                plotConnectionField(self.region, conn_field, title)
-        """
-        Private Functions
-        """
+		return 1 - scipy.stats.norm.cdf(gamma_th, mean, np.sqrt(variance))
+                
+	def getPConField(self, gamma_th):
+		grd_sz = self.gx.shape
+		pField = np.zeros(np.flip(grd_sz))
+		for i in range(grd_sz[1]):
+			for j in range(grd_sz[0]):
+				pField[i,j] = 1 - scipy.stats.norm.cdf(gamma_th, self.means[i,j], np.sqrt(self.vars[i,j]))
+				
+		return pField
 
-        def _calcObsCov(self):            
-                diffs = np.zeros((self.nObs,self.nObs));
-                diffs = np.array([ np.sqrt(np.sum((self.obsPos - pt)**2,1)) for pt in self.obsPos])
-                cov = self.cp.sigmaSH**2*np.exp(-1*diffs/self.beta())
-                return cov
 
-        def _setStats(self):
-                grd_sz = self.gx.shape
-                x_vals = self.gx[0,:]
-                y_vals = self.gy[:,0]
-                self.means = np.zeros(np.flip(grd_sz))
-                self.vars = np.zeros(np.flip(grd_sz))
-                for i in range(grd_sz[1]):
-                        for j in range(grd_sz[0]):
-                            pt = [ x_vals[i], y_vals[j] ]
-                            self.means[i,j] = self._posteriorExpecteddB(pt)
-                            self.vars[i,j] = self._calcVariance(pt)
+	def kPL(self):
+		if self.useEstimates:
+			kPL = self.cp.kPL
+			warnings.warn("Estimation not yet implemented")
+		else:
+			kPL = self.cp.kPL
+		return kPL
 
-        def _posteriorExpecteddB(self, pt):
-                phi = self._varPosWithObs(pt)
-                K = phi.T @ self.UInv
-                mean = self._calcMean(K, pt)
-                return mean
+	def nPL(self):
+		if self.useEstimates:
+			nPL = self.cp.nPL
+			warnings.warn("Estimation not yet implemented")
+		else:
+			nPL = self.cp.nPL
+		return nPL
 
-        def _calcMean(self, K, pt):
-                return self.estimatePLdBAtPoint(pt) + K.T @ self._obsDif
+	def rho(self):
+		if self.useEstimates:
+			rho = self.cp.sigmaMP**2
+			warnings.warn("Estimation not yet implemented")
+		else:
+			rho = self.cp.sigmaMP**2
+		return rho
 
-        def _calcVariance(self, pt):
-                k, phi = self._K(pt);
-                var = self.alpha() + self.rho()  - k @ phi
-                return var
+	def beta(self):
+		if self.useEstimates:
+			beta = self.cp.decorrSH
+			warnings.warn("Estimation not yet implemented")
+		else:
+			beta = self.cp.decorrSH
+		return beta
 
-        def _K(self, pt):
-                phi = self._varPosWithObs(pt)
-                k = phi.T @ self.UInv
-                return k, phi
-        
-        def _varPosWithObs(self, pt):
-                pt = np.array(pt)
-                diffs = np.sqrt(np.sum((self.obsPos - pt)**2, 1))
-                cov = self.cp.sigmaSH**2*np.exp(-1*diffs/self.beta());
-                return cov
+	def alpha(self):
+		if self.useEstimates:
+			rho = self.cp.sigmaSH**2
+			warnings.warn("Estimation not yet implemented")
+		else:
+			alpha = self.cp.sigmaSH**2
+		return alpha
+
+	"""
+	Plotting Functions
+	"""
+
+	def plotConnectivityField(self, gamma_th):
+		"""
+		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		% plotConnected2D
+		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+		% Plots the binary connectivity field over the workspace given a
+		% minimum required channel gain and threshold probability.
+		% Input:
+		% self - reference to the PredictedChannel object
+		% p_th - probability threshold. Since we're working with a
+		%           predicted channel, this is the probability that the
+		%           channel is good enough for communication
+		% gamma_th - the minimum required channel gain for communication
+		"""
+		conn_field = self.getConnectionField(gamma_th)
+		title = 'Connected Regions for Gamma_th = %.2f dB, p_th >= %.2f'% (gamma_th, self.p_th)
+		plotConnectionField(self.region, conn_field, title)
+	"""
+	Private Functions
+	"""
+
+	def _calcObsCov(self):            
+		diffs = np.zeros((self.nObs,self.nObs));
+		diffs = np.array([ np.sqrt(np.sum((self.obsPos - pt)**2,1)) for pt in self.obsPos])
+		cov = self.cp.sigmaSH**2*np.exp(-1*diffs/self.beta())
+		return cov
+
+	def _setStats(self):
+		grd_sz = self.gx.shape
+		x_vals = self.gx[0,:]
+		y_vals = self.gy[:,0]
+		self.means = np.zeros(np.flip(grd_sz))
+		self.vars = np.zeros(np.flip(grd_sz))
+		for i in range(grd_sz[1]):
+			for j in range(grd_sz[0]):
+				pt = [ x_vals[i], y_vals[j] ]
+				self.means[i,j] = self._posteriorExpecteddB(pt)
+				self.vars[i,j] = self._calcVariance(pt)		
+
+	def _posteriorExpecteddB(self, pt):
+		phi = self._varPosWithObs(pt)
+		K = phi.T @ self.UInv
+		mean = self._calcMean(K, pt)
+		return mean
+
+	def _calcMean(self, K, pt):
+		return self.estimatePLdBAtPoint(pt) + K.T @ self._obsDif
+
+	def _calcVariance(self, pt):
+		k, phi = self._K(pt);
+		var = self.alpha() + self.rho()  - k @ phi
+		return var
+
+	def _K(self, pt):
+		phi = self._varPosWithObs(pt)
+		k = phi.T @ self.UInv
+		return k, phi
+
+	def _varPosWithObs(self, pt):
+		pt = np.array(pt)
+		diffs = np.sqrt(np.sum((self.obsPos - pt)**2, 1))
+		cov = self.cp.sigmaSH**2*np.exp(-1*diffs/self.beta());
+		return cov
 
 
 def plotConnectionField(region, field, title):

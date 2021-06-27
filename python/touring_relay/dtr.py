@@ -2,6 +2,10 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.colors import ListedColormap
 
+#The MIQCP Solver
+import gurobipy as gp
+from gurobipy import GRB
+
 #Import a few utility functions...
 import sys 
 from pathlib import Path
@@ -23,21 +27,32 @@ import pointcloud as PC
 class DTR:
 
 	#TODO eventually, Beta should be calculated from comm specifications
-	def __init__(self, channels, ls, beta, th = -92):
+	def __init__(self, channels, ls, beta, th = -92, p_th=0.7):
 		assert len(channels)%2 == 0, "Expected even number of channels"
 		assert len(channels) == 2*len(ls), "Mismatch: number of regions and number of queue parameters"
 
 		self.n = len(ls)
+		self.channels = channels
+		self.p_th = p_th
+		self.gamma_th = th
 		self.region = channels[0].region
 		self.res = channels[0].res
-		self.cfs = [cc.getConnectionField(th) for cc in channels]
-		self.cfields = [(i+1)*(self.cfs[2*i]*self.cfs[2*i+1]) for i in range(len(ls))]
+		self.findJointConnectivityField()
 		self.Xis = [_indices_to_pts(cf, self.region, self.res) for cf in self.cfields]
 		self.cregions = [ PC.PointCloud(Xi['points']) for Xi in self.Xis]
 		for pc in self.cregions:
     			pc.partition(algo=4)
-		self.channels = channels
+
 		self.ps = PS.PollingSystem(ls, beta)
+
+		
+	def findJointConnectivityField(self):
+		#old way to do it, which just needs both to be above the threshold
+		#self.cfs = [cc.getConnectionField(th) for cc in channels]
+		#self.cfields = [(i+1)*(self.cfs[2*i]*self.cfs[2*i+1]) for i in range(len(ls))]
+		
+		pfs = [cc.getPConField(self.gamma_th) for cc in self.channels]
+		self.cfields = [1*((pfs[2*i]*pfs[2*i+1]) > self.p_th) for i in range(self.n)]
 
 	def optimize(self, do_plot=True, x_opt_method = 0):
 		converged = False
@@ -65,15 +80,21 @@ class DTR:
 			elif x_opt_method == 2:
 				base_temp = 100
 				X = self._Metropolis(X,S,pi, temp=100/(1 + it_count//25))
+			elif x_opt_method ==3:
+				X, _ = self._find_min_PWD(pi)
 			Xs.append(np.copy(X))
 			rp = MRP.RandomRP(pi)
 			S =  XtoS(X)
 			W = self.ps.calc_avg_wait(rp, S)
+			print('Transition probabilities: ', pi)
+			print('Points: ', X)
+			print("Optimized Location Waiting Time: %.4f"%(W))
 			if it_count%50 == 0:
 				print("Optimized Location Waiting Time: %.4f"%(W))
 			it_count += 1
 
-			if (W - Wprev) == 0:
+			eps = 0.001
+			if abs(W - Wprev) <= eps:
 				converged = True
 			Wprev = W
 		if do_plot:
@@ -102,6 +123,84 @@ class DTR:
 		plt.show()
 
 	#Private Functions
+	
+	def _find_min_PWD(self, pi):
+		#To use Gurboi, the objective must be linear or quadratic	
+		m = gp.Model('min_pairwise_distance')
+		#setup dummy variables required for linear objective
+		n_regions = len(self.cregions)
+		s = []
+		s_obj = []
+		for i in range(n_regions):
+			for j in range(i+1, n_regions):
+				s.append(m.addVar())
+				s_obj.append(pi[i]*pi[j]*s[-1])	
+		#n_edges = np.sum([i for i in range(n_regions)])
+		#s = [m.addVar(obj=) for i in range(n_edges)]
+		m.setObjective(np.sum(s_obj))
+		xs = [m.addVar() for i in range(n_regions)]
+		ys = [m.addVar() for i in range(n_regions)]
+		
+		#add constraints to couple new dummy vars to relay postitions
+		ij = 0
+		for i in range(n_regions):
+			for j in range(i+1, n_regions): 
+				#add the quadratic constraint that ||xi - xj||^2 = sij^2
+				M = np.array([[1,0,0, 0, 0],[0,-1,1, 0, 0],[0,1,-1, 0, 0], [0, 0, 0, -1, 1], [0, 0, 0, 1, -1]])
+				xc=[s[ij], xs[i], xs[j], ys[i], ys[j]]
+				m.addMQConstr(M,None, GRB.EQUAL, 0, xc, xc)
+				ij += 1
+	
+		#constrain relay points to lie within their regions
+		eta = []
+		for i in range(n_regions):
+			reg = self.cregions[i]
+			As = np.zeros((0,2))
+			bs = []
+			Cs = []
+		       
+			n_vars = 2
+			for poly in reg.polygons:
+				for cnvx in poly.cnvx_partition:
+					n_vars += 1
+					Aik,bik = cnvx.to_linear_constraints()
+					As = np.concatenate((As,Aik), axis = 0)
+					C = 1*10000*np.ones(len(bik)) #actually need to find a value of this constant
+					Cs.append(C)
+					bs += (bik[:,0]+C).tolist()
+		    
+			eta_i = [m.addVar(vtype=GRB.BINARY) for k in range(n_vars-2)]
+			eta.append(eta_i)
+			m.addConstr(np.sum(eta_i) == 1)
+			eta.append(eta_i)
+			n_constraints = len(bs)
+			A = np.zeros((n_constraints, n_vars))
+			A[:,:2] = As
+			idx = 0
+			for j in range(n_vars - 2):
+				C = Cs[j]
+				lc = len(C)
+				A[idx:idx+lc, 2+j] = C
+				idx += lc
+			
+			b = np.array(bs)
+		    
+			LMC = m.addMConstr(A, [xs[i], ys[i] , *eta_i], GRB.LESS_EQUAL, b)
+		    
+		#and now solve
+		m.params.NonConvex = 2
+		m.optimize()
+		
+		#TODO - feasability checking/handling
+		#assert m.status == 2, '
+		
+		#and extract the optimal values
+		x = []
+		for i in range(n_regions):
+			x.append([xs[i].x, ys[i].x])
+
+		#return the points as well as the optimal value
+		return np.array(x), m.getObjective().getValue()
 
 	def _simple_gradient(self, X, S, pi, lr):
 		Xnext = np.copy(X)

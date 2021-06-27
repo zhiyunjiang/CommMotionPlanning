@@ -31,7 +31,7 @@ class PointCloud():
 		return self.polygons
 		
 	def plot(self, frmt = ''):
-		plt.plot(points[:,0], points[:,0], frmt)
+		plt.plot(self.points[:,0], self.points[:,1], frmt)
 		
 	def plot_polys(self, show_partition=True):
 		if self.polygons is not None:
@@ -231,8 +231,7 @@ class PolyConstructor:
 class Poly:
 
 	def __init__(self, points, holes = None):
-		assert len(points) > 2, 'Tried to create a poly from point(s): ' + str(points)
-		self.points = points
+		self.setPoints(points)
 		if holes is None:
 			holes = []
 		self.holes = holes
@@ -282,7 +281,7 @@ class Poly:
 		
 	def area(self):
 		area = poly_area(self.points)
-		for hole in holes:
+		for hole in self.holes:
 			area -= hole.area()
 		return area
 		
@@ -352,7 +351,8 @@ class Poly:
 		if len(self.holes) > 0:
 			tri_dict['holes'] = hole_pts 
 
-		#triangulate with the triangle package
+		#triangulate with the triangle library
+		assert len(points) > 2, 'Trying to triangulate fewer than 2 points: ' + str(self)
 		t = triangle.triangulate(tri_dict)
 		t_verts = t['vertices'].tolist()
 		tris = t['triangles'].tolist()
@@ -413,7 +413,7 @@ class Poly:
 					new_poly = Poly(plyc0.points)
 					if new_poly.is_convex():
 						did_merge = True
-						poly0.points = new_poly.points
+						poly0.setPoints(new_poly.points)
 						#Have edges that linked to poly1 link to updated poly0
 						partition[edge_2_poly[m][1]] = poly0
 					if not did_merge:
@@ -428,6 +428,10 @@ class Poly:
 		
 		return partition
 		
+	def setPoints(self, pts):
+		assert len(pts) > 2, 'Tried to give polygon fewer than 3 vertices: ' + str(pts)
+		self.points = pts
+		
 	def edges(self):
 		eds = []
 		n = len(self.points)
@@ -440,17 +444,21 @@ class Poly:
 		#rdp might actually handle pruning colinear points for us
 		# but it seems to give us a marginal speedup, so leaving in for now
 		self.prune_colinear()
-		n_orig = len(self.points)
+		#n_orig = len(self.points)
 		reduced= rdp(self.points, epsilon = eps)
 		#print('reduced from %d to %d vertices'%(n_orig, len(reduced)))
-		self.points = reduced
+		if len(reduced) > 2:
+			self.setPoints(reduced)
+		else:
+			print('Info: Reduced Poly only contains two points. Reduction ignored\n' + str(self))
 		
 	def prune_colinear(self):
 		pruning = True
 
 		i = 0
-		while pruning:
-			n = len(self.points)
+		n = len(self.points)
+		while pruning and n >3:#once we're down to three points, no need to continue reducing.
+
 			p0 = self.points[(i-1)%n]
 			p1 = self.points[(i)%n]
 			p2 = self.points[(i+1)%n]
@@ -458,10 +466,12 @@ class Poly:
 			#check to see if these points are on the same line
 			if colinear(p0, p1, p2):
 				#remove this one dude
-				self.points = np.delete( self.points, i%n, axis=0)
+				self.setPoints(np.delete( self.points, i%n, axis=0))
 			else:
 				i += 1
 				pruning = (i < n)
+				
+			n = len(self.points)
 	
 			
 	def get_interior_point(self):
@@ -491,7 +501,7 @@ class Poly:
 			plot_points = self.points
 			p0 = self.points[0]
 			plot_points = np.concatenate((plot_points, [p0]), axis=0)
-			plt.plot(plot_points[:,0], plot_points[:,1])
+			plt.plot(plot_points[:,0], plot_points[:,1], 'k-')
 		
 	
 	def is_cc(self):
@@ -499,7 +509,7 @@ class Poly:
 
 	def make_cc(self):
 		if not self.is_cc():
-			self.points = np.flip(self.points, axis=0)
+			self.setPoints(np.flip(self.points, axis=0))
 
 	def _signed_area(self):
 		area = _signed_area(self.points)
@@ -542,7 +552,7 @@ class Poly:
 			else:
 				#ok this is just a normal guy
 				A = np.array([-1*d[1]/d[0], 1])
-				b = -1*( A @ p0)
+				b = ( A @ p0)
 			return A, b
 				
 
