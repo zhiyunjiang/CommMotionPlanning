@@ -12,8 +12,7 @@ class QoSReq:
 		self.r = r
 		self.rx_noise = rx_noise
 		self.k = -1.5/np.log(5*self.ber)
-		
-		
+
 	def reqTXPower(self, channel_gain_dB):
 		CNR_lin = self._toLinCNR(channel_gain_dB)
 		return self._calcPower(1/CNR_lin)

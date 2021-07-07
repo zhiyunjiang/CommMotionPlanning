@@ -7,3 +7,5 @@ arjun_python/**
 __pycache__/
 .*
 !/.gitignore
+*.eps
+

@@ -18,13 +18,13 @@ class PollingSystem:
 		self.n = len(Ls) #Number of queues in the system
 		self.Ls = np.array(Ls) #Lambdas, i.e. arrival rates at each system
 		self.beta = beta #service time
-		if self._Rho() >= 1:
-			warnings.warn("System with traffic %f will be unstable."%(self._Rho()))
+		if self.RhoSys() >= 1:
+			warnings.warn("System with traffic %f will be unstable."%(self.RhoSys()))
 
 
 	def calc_optiaml_rp(self, S):
 		#start out assuming frequencies directly proportional to arrival rates
-		x0 = self.Ls/self._L_s()
+		x0 = self.Ls/self.LSys()
 		sys_wait = lambda x: self._calc_avg_wait_random(x, S)
 		bounds = [(0.001,1) for i in range(self.n)]
 		A = np.ones(self.n)
@@ -54,6 +54,7 @@ class PollingSystem:
 		is_traveling = False
 		queues = [Queue() for i in range(self.n)]
 		stage = 0
+		total_travel_time = 0
 		while t <=tmax:
 			x = [len(queue.waiting) for queue in queues]
 			xt.append(np.concatenate( (np.array([t, q]), x) ))
@@ -72,6 +73,7 @@ class PollingSystem:
 				q_prev = q
 				q = rp.next(q)
 				server_time = S[q_prev,q]
+				total_travel_time += server_time
 				is_traveling = True
 			#account for anything that happens during the server time
 			t_next = t + server_time
@@ -86,9 +88,9 @@ class PollingSystem:
 
 		_, sys_avg_wait = self._calc_sim_stats(queues)
 		wt.append([tmax, sys_avg_wait])
-		print("System Average Wait Time: %.4f"%(sys_avg_wait))
+		#print("System Average Wait Time: %.4f"%(sys_avg_wait))
 
-		return xt, wt, queues
+		return xt, wt, queues, total_travel_time
 
 
 	def plotWvsPi(self, S):
@@ -115,7 +117,7 @@ class PollingSystem:
 
 		avg_waits = [queue.avg_wait() for queue in queues]
 		#now find the overall system average
-		weights = self.Ls/self._L_s()
+		weights = self.Ls/self.LSys()
 		sys_avg_wait = np.average(avg_waits, weights = weights)
 
 		return avg_waits, sys_avg_wait
@@ -131,25 +133,25 @@ class PollingSystem:
 		sk_2 = S**2 @ pi
 		rhok = np.reshape(self.Ls * self.beta, (1, self.n))
 
-		term1 = 1/self._Rho()
-		term2 = ( self.beta*self._Rho()**2 )/ ( 2*(1 - self._Rho()) )
-		term3 = (np.transpose(pi) @ sk)/(1-self._Rho()) * ( (rhok - rhok**2) @ (1/pi) )
+		term1 = 1/self.RhoSys()
+		term2 = ( self.beta*self.RhoSys()**2 )/ ( 2*(1 - self.RhoSys()) )
+		term3 = (np.transpose(pi) @ sk)/(1-self.RhoSys()) * ( (rhok - rhok**2) @ (1/pi) )
 		term4 = rhok @ sk
-		term5 =  (self._Rho() * np.transpose(pi) @ sk_2) /(2* ( np.transpose(pi) @ sk) )
+		term5 =  (self.RhoSys() * np.transpose(pi) @ sk_2) /(2* ( np.transpose(pi) @ sk) )
 
 		return np.reshape(term1 *(term2 + term3 - term4 + term5 ), 1)[0]
 
-	def _L_s(self):
+	def LSys(self):
 		"""
 		Arrival rate for entire system
 		"""
 		return np.sum(self.Ls)
 
-	def _Rho(self):
+	def RhoSys(self):
 		"""
 		Traffic for entire system
 		"""
-		return self.beta * self._L_s()
+		return self.beta * self.LSys()
 
 	def _register_arrivals(self, arrival_times, t_next, queues, q, is_traveling, xt):
 		t_arrival = arrival_times[0][0]

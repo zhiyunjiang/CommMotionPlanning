@@ -64,7 +64,7 @@ class DTR:
 		S = XtoS(np.copy(X))
 		it_count = 0
 		max_it = 500
-		Wprev = 0
+		Wprev = np.inf
 		while (not converged) and (it_count < max_it):
 			#first, find optiaml pi
 			res = self.ps.calc_optiaml_rp(S)
@@ -93,34 +93,42 @@ class DTR:
 				print("Optimized Location Waiting Time: %.4f"%(W))
 			it_count += 1
 
-			eps = 0.001
+			eps = 0.01
 			if abs(W - Wprev) <= eps:
 				converged = True
 			Wprev = W
 		if do_plot:
-			self.plot_optimization(Xs)
+			self.plot_optimization(X)
 
 		print("Optimized Waiting Time: %.4f"%(Wprev))
-		return pi, X
+		return W, pi, X
+		
+	def naive_policy(self):
+		weights = np.ones(self.n)
+		X,_ = self._find_min_PWD(weights)
+		pi = self.ps.Ls/np.sum(self.ps.Ls)
+		rp = MRP.RandomRP(pi)
+		W = self.ps.calc_avg_wait(rp, XtoS(X))
+		return W, pi, X
 
-	def plot_optimization(self, Xs):
+	def plot_optimization(self, x, save = False, ls=12):
+		fig = plt.figure(figsize=(12,12))
 		#plot the connectivity fields
-		color_array=['white', 'red', 'green', 'cyan']
-		cmap = ListedColormap(color_array)
-		ticks =[0.75/2,1.5-0.75/2, 1.5+0.75/2, 3-0.75/2]
-		tick_labels = ['No Connectivity','X1', 'X2', 'X3']
-		CC.plotField(self.region, np.sum(self.cfields, axis=0), 'Regions of Joint Connectivity', cmap=cmap,
-        			ticks=ticks, tick_labels = tick_labels, do_show=False)
-
-		#now print the trajectories and final positions
-		Xs = np.array(Xs)
+		color_list=['r', 'g', 'b', 'c']
 		for i in range(self.n):
-			xis = Xs[:,i,:]
-			plt.plot(xis[:,0], xis[:,1], label='t%d'%(i+1))
-			plt.scatter(xis[-1,0], xis[-1,1], marker="+", c='k', s=35)
-
-		plt.legend()
+			Xi = self.Xis[i]
+			pts = Xi['points']
+			plt.plot(pts[:,0],  pts[:,1], '.' + color_list[i], label='Relay Region %d'%(i+1))
+			plt.plot(x[i,0], x[i,1], '+k', markersize=20)
+			
+		plt.xlim(self.region[1], self.region[0])
+		plt.ylim(self.region[3], self.region[2])
+		plt.xlabel('x (m)')
+		plt.ylabel('y (m)')
+		plt.legend(prop={'size':12})
 		plt.show()
+		if save:
+			plt.savefig('sim_pairs_%d_pth_%.2f_gammath_%d'%(self.n, self.p_th, self.gamma_th),format='png')
 
 	#Private Functions
 	
@@ -283,8 +291,8 @@ def XtoS(X, v = 1):
     for i in range(n):
         for j in range(i+1,n):
             dist = np.linalg.norm(X[i] - X[j])
-            S[i,j] = dist
-            S[j,i] = dist
+            S[i,j] = dist/v
+            S[j,i] = dist/v
     return S
 
 def _indices_to_pts(r, region, res):
