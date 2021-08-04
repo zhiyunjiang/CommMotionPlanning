@@ -1,6 +1,7 @@
 import numpy as np
 from numpy.random import default_rng
 from MarkovianRP import RandomRP
+from StaticRP import CyclicRP, TableRP
 from Queue import Queue
 import warnings
 import scipy.optimize
@@ -20,6 +21,19 @@ class PollingSystem:
 		self.beta = beta #service time
 		if self.RhoSys() >= 1:
 			warnings.warn("System with traffic %f will be unstable."%(self.RhoSys()))
+			
+	
+	def LSys(self):
+		"""
+		Arrival rate for entire system
+		"""
+		return np.sum(self.Ls)
+
+	def RhoSys(self):
+		"""
+		Traffic for entire system
+		"""
+		return self.beta * self.LSys()
 
 
 	def calc_optiaml_rp(self, S):
@@ -32,18 +46,20 @@ class PollingSystem:
 		return minimize(sys_wait , x0, method='SLSQP', bounds = bounds, constraints = constraint, tol=1e-6)
 
 
-	def calc_avg_wait(self, mrp, S):
+	def calc_avg_wait(self, rp, S):
 		"""
 		Currently only handles random routing policy
 		"""
-		if isinstance(mrp, RandomRP):
-			return self._calc_avg_wait_random(mrp.pi, S)
+		#TODO - handle Table policies once I can access
+		#"Polling with a General-Service Order Table", (Baker, Rubin 1987)
+		if isinstance(rp, RandomRP):
+			return self._calc_avg_wait_random(rp.pi, S)
+		elif isinstance(rp, CyclicRP):
+			return self._calc_avg_wait_cyclic(rp, S)
 		else:
-			print("Waiting time for non-random polling systems not yet implemented.\n")
+			print("Theoretical Waiting Time calculation only implemented for clyclic and random policies.\n")
 			return -1
 		
-
-
 	def simulate(self, rp, S, tmax, q = 0):
 
 		#generate arrival times at each queue
@@ -122,8 +138,6 @@ class PollingSystem:
 
 		return avg_waits, sys_avg_wait
 		
-
-
 	def _calc_avg_wait_random(self, pi, S):
 
 		"""
@@ -140,19 +154,26 @@ class PollingSystem:
 		term5 =  (self.RhoSys() * np.transpose(pi) @ sk_2) /(2* ( np.transpose(pi) @ sk) )
 
 		return np.reshape(term1 *(term2 + term3 - term4 + term5 ), 1)[0]
-
-	def LSys(self):
+		
+	def _calc_avg_wait_cyclic(self, rp, S):
 		"""
-		Arrival rate for entire system
+		Based on "Workloads and Waiting Times in Single-Server Systems with Multiple Customer Classes" (Boxma, 1989)
 		"""
-		return np.sum(self.Ls)
-
-	def RhoSys(self):
-		"""
-		Traffic for entire system
-		"""
-		return self.beta * self.LSys()
-
+		K_n = np.reshape(self.Ls/self.LSys(), (self.n, 1))
+		K_nm = (K_n @ K_n.T ) - np.diag(K_n)
+		s = np.sum(S)
+		s_2 = s**2
+		rhok = np.reshape(self.Ls * self.beta, (1, self.n))
+		term1 = 1/self.RhoSys()
+		term2 = ( self.beta*self.RhoSys()**2 )/ ( 2*(1 - self.RhoSys()) )
+		term3 = (self.LSys()/( 2*(1 - self.RhoSys())))*(self.beta**2)*np.sum(K_nm)
+		term4 = self.RhoSys()*s_2/(2*s)
+		term5 = (s/ (2*(1 - self.RhoSys()) ))*(self.RhoSys()**2 - np.sum(rhok**2))
+		return term1*(term2 + term3 + term4 + term5)
+		
+	def _calc_avg_wait_table(self):
+		pass
+		
 	def _register_arrivals(self, arrival_times, t_next, queues, q, is_traveling, xt):
 		t_arrival = arrival_times[0][0]
 		while t_arrival <= t_next:

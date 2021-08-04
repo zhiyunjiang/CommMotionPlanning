@@ -41,7 +41,7 @@ class DTR:
 		self.Xis = [_indices_to_pts(cf, self.region, self.res) for cf in self.cfields]
 		self.cregions = [ PC.PointCloud(Xi['points']) for Xi in self.Xis]
 		for pc in self.cregions:
-    			pc.partition(algo=4)
+    			pc.partition(algo=4, alpha = 0.5/self.res)
 
 		self.ps = PS.PollingSystem(ls, beta)
 
@@ -54,7 +54,7 @@ class DTR:
 		pfs = [cc.getPConField(self.gamma_th) for cc in self.channels]
 		self.cfields = [1*((pfs[2*i]*pfs[2*i+1]) > self.p_th) for i in range(self.n)]
 
-	def optimize(self, do_plot=True, x_opt_method = 0):
+	def optimize(self, do_plot=True, x_opt_method = 0, verbose = False):
 		converged = False
 		#initialize policy and polling locations
 		pi = MRP.build_ed_policy(self.ps.Ls, self.ps.beta)
@@ -70,7 +70,7 @@ class DTR:
 			res = self.ps.calc_optiaml_rp(S)
 			pi = res.x
 			W = res.fun
-			if it_count%50 == 0:
+			if it_count%50 == 0 and verbose:
 				print("Optimized Policy Waiting Time: %.4f"%(W))
 			#Now update the coordinates
 			if x_opt_method == 0:
@@ -81,15 +81,16 @@ class DTR:
 				base_temp = 100
 				X = self._Metropolis(X,S,pi, temp=100/(1 + it_count//25))
 			elif x_opt_method ==3:
-				X, _ = self._find_min_PWD(pi)
+				X, _ = self._find_min_PWDalt(pi)
 			Xs.append(np.copy(X))
 			rp = MRP.RandomRP(pi)
 			S =  XtoS(X)
 			W = self.ps.calc_avg_wait(rp, S)
-			print('Transition probabilities: ', pi)
-			print('Points: ', X)
-			print("Optimized Location Waiting Time: %.4f"%(W))
-			if it_count%50 == 0:
+			if verbose:
+				print('Transition probabilities: ', pi)
+				print('Points: ', X)
+				print("Optimized Location Waiting Time: %.4f"%(W))
+			if it_count%50 == 0 and verbose:
 				print("Optimized Location Waiting Time: %.4f"%(W))
 			it_count += 1
 
@@ -99,8 +100,8 @@ class DTR:
 			Wprev = W
 		if do_plot:
 			self.plot_optimization(X)
-
-		print("Optimized Waiting Time: %.4f"%(Wprev))
+		if verbose:
+			print("Optimized Waiting Time: %.4f"%(Wprev))
 		return W, pi, X
 		
 	def naive_policy(self):
@@ -135,6 +136,8 @@ class DTR:
 	def _find_min_PWD(self, pi):
 		#To use Gurboi, the objective must be linear or quadratic	
 		m = gp.Model('min_pairwise_distance')
+		#Let's keep this nice and quiet
+		#m.Params.OutputFlag = 0
 		#setup dummy variables required for linear objective
 		n_regions = len(self.cregions)
 		s = []
@@ -143,8 +146,7 @@ class DTR:
 			for j in range(i+1, n_regions):
 				s.append(m.addVar())
 				s_obj.append(pi[i]*pi[j]*s[-1])	
-		#n_edges = np.sum([i for i in range(n_regions)])
-		#s = [m.addVar(obj=) for i in range(n_edges)]
+
 		m.setObjective(np.sum(s_obj))
 		xs = [m.addVar() for i in range(n_regions)]
 		ys = [m.addVar() for i in range(n_regions)]
@@ -194,6 +196,91 @@ class DTR:
 			b = np.array(bs)
 		    
 			LMC = m.addMConstr(A, [xs[i], ys[i] , *eta_i], GRB.LESS_EQUAL, b)
+		    
+		#and now solve
+		m.params.NonConvex = 2
+		m.optimize()
+		
+		#TODO - feasability checking/handling
+		#assert m.status == 2, '
+		
+		#and extract the optimal values
+		x = []
+		for i in range(n_regions):
+			x.append([xs[i].x, ys[i].x])
+
+		#return the points as well as the optimal value
+		return np.array(x), m.getObjective().getValue()
+		
+	def _find_min_PWDalt(self, pi):
+		#use a series of piecewise linear constraints rather than binary variables
+		
+		
+		#To use Gurboi, the objective must be linear or quadratic	
+		m = gp.Model('min_pairwise_distance')
+		#Let's keep this nice and quiet
+		#m.Params.OutputFlag = 0
+		#setup dummy variables required for linear objective
+		n_regions = len(self.cregions)
+		s = []
+		s_obj = []
+		for i in range(n_regions):
+			for j in range(i+1, n_regions):
+				s.append(m.addVar())
+				s_obj.append(pi[i]*pi[j]*s[-1])	
+
+		m.setObjective(np.sum(s_obj))
+		xs = [m.addVar() for i in range(n_regions)]
+		ys = [m.addVar() for i in range(n_regions)]
+		
+		#add constraints to couple new dummy vars to relay postitions
+		ij = 0
+		for i in range(n_regions):
+			for j in range(i+1, n_regions): 
+				#add the quadratic constraint that ||xi - xj||^2 = sij^2
+				M = np.array([[1,0,0, 0, 0],[0,-1,1, 0, 0],[0,1,-1, 0, 0], [0, 0, 0, -1, 1], [0, 0, 0, 1, -1]])
+				xc=[s[ij], xs[i], xs[j], ys[i], ys[j]]
+				m.addMQConstr(M,None, GRB.EQUAL, 0, xc, xc)
+				ij += 1
+	
+		#constrain relay points to lie within their regions
+		for i in range(n_regions):
+			reg = self.cregions[i]
+			theta_tildes = []
+			for poly in reg.polygons:
+				for cnvx in poly.cnvx_partition:
+					Aik,bik = cnvx.to_linear_constraints()
+					#recall Aik [x,y]^T -b<0 if [x,y] in polygon
+					n_edges = len(bik)
+					zs = [m.addVar(lb=float('-inf')) for i in range(n_edges)]
+					Aik_aug = np.zeros((n_edges,2+n_edges))
+					Aik_aug[:,:2] = Aik
+					Aik_aug[:,2:] = np.eye(n_edges)
+					m.addMConstr(Aik_aug, [xs[i], ys[i], *zs ], GRB.EQUAL, bik)
+					
+					ztildes = [m.addVar(lb=float('-inf')) for i in range(n_edges)]
+					for j in range(n_edges):
+						#first of the piecewise constraints
+						m.addGenConstrPWL(zs[j], ztildes[j], [-1,0,1],[-1000, 1, 1])
+					
+					#dummy variable for checking how many constraints are satisfied
+					theta = m.addVar(lb=float('-inf'))
+					a = np.ones((1, n_edges+1))
+					a[-1] = -1
+					m.addMConstr(a, [*ztildes, theta], GRB.EQUAL, np.array([0]))
+					
+					# saturate so that theta_tilde is 1 if all constraints satisfied,
+					# ~0 otherwise
+					theta_tilde = m.addVar()
+					theta_tildes.append(theta_tilde)
+					m.addGenConstrPWL(theta, theta_tilde, [0,n_edges-0.001,n_edges,n_edges+1],
+								[0,0, 1, 1])
+						
+			#sum of theta tildes should be greater than 1,
+			# i.e., at least all constraints for one cnvx region should be satisfied
+			a = np.ones((1,len(theta_tildes)))
+			m.addMConstr(a, theta_tildes, GRB.GREATER_EQUAL, np.array([1]))
+					
 		    
 		#and now solve
 		m.params.NonConvex = 2

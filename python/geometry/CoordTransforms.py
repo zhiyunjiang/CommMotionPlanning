@@ -31,7 +31,7 @@ def toGridFromRaw(region, res, raw_pt):
         yGMax = np.ceil( (region[2] - region[3])*res)-2
         xG = np.minimum(np.rint((raw_pt[:,0] - region[1])*res), xGMax)
         yG = np.minimum(np.rint((raw_pt[:,1] - region[3])*res), yGMax)
-        grid_pt = np.array([xG,yG], dtype=int)
+        grid_pt = np.array([xG,yG], dtype=int).T
     return grid_pt
 
 

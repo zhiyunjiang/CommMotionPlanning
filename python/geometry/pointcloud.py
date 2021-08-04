@@ -245,7 +245,7 @@ class Poly:
 		pstr += 'Is Interior: ' + str(self.is_interior)
 		return pstr
 
-	#build the A matrix and b vector s.t. Ax-b < 0vec iff point in polygon		
+	#build the A matrix and b vector s.t. Ax-b < 0 vec iff point in polygon		
 	def to_linear_constraints(self):
 		#only works if we're working with a convex polygon
 		if not self.is_convex():
@@ -260,7 +260,7 @@ class Poly:
 		pt = self.get_interior_point()
 		for i in range(ne):
 			Ai, bi = edges[i].as_constraint()
-			if Ai @ pt - bi >0:
+			if Ai @ pt - bi > 0:
 				Ai *= -1
 				bi *= -1
 			A[i] = Ai
