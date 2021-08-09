@@ -139,8 +139,8 @@ def plotCFwithOverlay(n, tjcps, pjcps, qBase, region):
 	plt.ylabel('y (m)')
 	#plt.legend()
 	
-def setup_polling_sys(pcs, els, beta, GAMMA_TH, p_th):
-	sys = dtr.DTR(pcs, els, beta, th=GAMMA_TH, p_th = p_th)
+def setup_polling_sys(pcs, region, els, beta, GAMMA_TH, p_th):
+	sys = dtr.DTR(pcs, region, els, beta, th=GAMMA_TH, p_th = p_th)
 	#find the AORP
 	W, pi, X = sys.optimize(x_opt_method=3, do_plot = False)
 	AORP = {'WT': W, 'X': X, 'pi': pi}

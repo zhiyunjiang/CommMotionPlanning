@@ -26,8 +26,7 @@ import pointcloud as PC
 #Delay-Tolerant Relay System
 class DTR:
 
-	#TODO eventually, Beta should be calculated from comm specifications
-	def __init__(self, channels, ls, beta, th = -92, p_th=0.7):
+	def __init__(self, channels, region, ls, beta, th = -92, p_th=0.7):
 		assert len(channels)%2 == 0, "Expected even number of channels"
 		assert len(channels) == 2*len(ls), "Mismatch: number of regions and number of queue parameters"
 
@@ -35,7 +34,7 @@ class DTR:
 		self.channels = channels
 		self.p_th = p_th
 		self.gamma_th = th
-		self.region = channels[0].region
+		self.region = region
 		self.res = channels[0].res
 		self.findJointConnectivityField()
 		self.Xis = [_indices_to_pts(cf, self.region, self.res) for cf in self.cfields]
@@ -81,7 +80,7 @@ class DTR:
 				base_temp = 100
 				X = self._Metropolis(X,S,pi, temp=100/(1 + it_count//25))
 			elif x_opt_method ==3:
-				X, _ = self._find_min_PWDalt(pi)
+				X, _ = self._find_min_PWD_CPlex(pi)
 			Xs.append(np.copy(X))
 			rp = MRP.RandomRP(pi)
 			S =  XtoS(X)
@@ -131,8 +130,7 @@ class DTR:
 		if save:
 			plt.savefig('sim_pairs_%d_pth_%.2f_gammath_%d'%(self.n, self.p_th, self.gamma_th),format='png')
 
-	#Private Functions
-	
+	#Private Functions	
 	def _find_min_PWD(self, pi):
 		#To use Gurboi, the objective must be linear or quadratic	
 		m = gp.Model('min_pairwise_distance')
@@ -212,14 +210,85 @@ class DTR:
 		#return the points as well as the optimal value
 		return np.array(x), m.getObjective().getValue()
 		
+		
+		
+	def _find_min_PWD_CPlex(self, pi):
+		""""
+		IBM's CPlex studio cannot handle quadratic equality constraints nor anything beyond quadratic terms in the objective,
+		so this method will always result in an error. See 
+		https://www.ibm.com/docs/en/icos/12.7.1.0?topic=smippqt-miqcp-mixed-integer-programs-quadratic-terms-in-constraints for details.
+		"""
+	
+		from docplex.mp.model import Model
+		from docplex.mp.constr import QuadraticConstraint, ComparisonType	
+		mdl = Model(name='min_pairwise_distance')
+		n_regions = len(self.cregions)
+		s=[]
+		k=[]
+		for i in range(n_regions):
+			for j in range(i+1, n_regions):
+				s.append(mdl.continuous_var())
+				k.append(pi[i]*pi[j])
+
+		mdl.minimize(mdl.sum([k[i]*s[i] for i in range(len(s))]))
+
+		#set up variables needed for objective
+		xs = mdl.continuous_var_list(n_regions, lb=self.region[1], ub=self.region[0])
+		ys = mdl.continuous_var_list(n_regions, lb=self.region[3], ub=self.region[2])
+
+		#add constraints to couple new dummy vars to relay postitions
+		qcs=[]
+		for i in range(n_regions):
+			for j in range(i+1, n_regions):
+				qcs.append( QuadraticConstraint(mdl, mdl.sum_squares( [(xs[i]-xs[j]), (ys[i]-ys[j])] ), ComparisonType.EQ, mdl.sum_squares([s[len(qcs)]]) ))
+		#Not sure this is necessary        
+		mdl.add_quadratic_constraints(qcs)
+
+
+		C = 10000 #actually need to find a value of this constant
+		#Constrain relay points to lie within their regions
+		for i in range(n_regions):
+			reg = self.cregions[i]    
+			mk=0
+			eta_i = []
+			for poly in reg.polygons:
+				for cnvx in poly.cnvx_partition:
+					eta_ik = mdl.binary_var()
+					eta_i.append(eta_ik)
+				mk+=1
+				Aik,bik = cnvx.to_linear_constraints()
+				
+				bik[:,0] += C
+
+				for j in range(len(bik)):
+				#add the linear constraint
+					mdl.add_constraint_(mdl.le_constraint(Aik[j,0]*xs[i] + Aik[j,1]*ys[i] +C*eta_ik ,bik[j,0]))
+		
+			#we must be in exactly one of the subregions
+			mdl.add_constraint(mdl.eq_constraint(mdl.sum(eta_i), 1))
+
+
+		sol = mdl.solve()
+		argmin = None
+		min_val = float('inf')
+		if sol is not None:
+			#extract x and y values
+			argmin = []
+			for i in range(n_regions):
+				argmin.append([xs[i].solution_value(), ys[i].solution_value()])
+			argmin = np.array(argmin)
+			#extract min val
+			min_val = sol.get_objective_value()
+
+		return argmin, min_val
+		
 	def _find_min_PWDalt(self, pi):
 		#use a series of piecewise linear constraints rather than binary variables
-		
 		
 		#To use Gurboi, the objective must be linear or quadratic	
 		m = gp.Model('min_pairwise_distance')
 		#Let's keep this nice and quiet
-		#m.Params.OutputFlag = 0
+		m.Params.OutputFlag = 0
 		#setup dummy variables required for linear objective
 		n_regions = len(self.cregions)
 		s = []
@@ -233,7 +302,9 @@ class DTR:
 		xs = [m.addVar() for i in range(n_regions)]
 		ys = [m.addVar() for i in range(n_regions)]
 		
+		
 		#add constraints to couple new dummy vars to relay postitions
+		#identical to MI formulation
 		ij = 0
 		for i in range(n_regions):
 			for j in range(i+1, n_regions): 
@@ -244,40 +315,46 @@ class DTR:
 				ij += 1
 	
 		#constrain relay points to lie within their regions
+		#using a series of linear and piecewise linear equality constraints
 		for i in range(n_regions):
 			reg = self.cregions[i]
 			theta_tildes = []
+			k=0
 			for poly in reg.polygons:
 				for cnvx in poly.cnvx_partition:
+					k+=1
 					Aik,bik = cnvx.to_linear_constraints()
 					#recall Aik [x,y]^T -b<0 if [x,y] in polygon
+					#=> -Aik[x,y]^T +b > 0 if [x,y] in polygon
+					#=>z = -Aik[x,y]^T +b => z+Aik[x,y]=b
 					n_edges = len(bik)
-					zs = [m.addVar(lb=float('-inf')) for i in range(n_edges)]
 					Aik_aug = np.zeros((n_edges,2+n_edges))
 					Aik_aug[:,:2] = Aik
 					Aik_aug[:,2:] = np.eye(n_edges)
+
+					zs = [m.addVar(lb=float('-inf')) for j in range(n_edges)]
 					m.addMConstr(Aik_aug, [xs[i], ys[i], *zs ], GRB.EQUAL, bik)
 					
-					ztildes = [m.addVar(lb=float('-inf')) for i in range(n_edges)]
+					ztildes = [m.addVar(lb=float('-inf'), name='z tilde %d.%d.%d'%(i,k,j)) for j in range(n_edges)]
 					for j in range(n_edges):
 						#first of the piecewise constraints
 						m.addGenConstrPWL(zs[j], ztildes[j], [-1,0,1],[-1000, 1, 1])
 					
 					#dummy variable for checking how many constraints are satisfied
-					theta = m.addVar(lb=float('-inf'))
+					theta = m.addVar(lb=float('-inf'), name='theta %d.%d'%(i,k))
 					a = np.ones((1, n_edges+1))
-					a[-1] = -1
+					a[0,-1] = -1
 					m.addMConstr(a, [*ztildes, theta], GRB.EQUAL, np.array([0]))
 					
 					# saturate so that theta_tilde is 1 if all constraints satisfied,
 					# ~0 otherwise
-					theta_tilde = m.addVar()
+					theta_tilde = m.addVar(name='theta tilde %d.%d'%(i,k))
 					theta_tildes.append(theta_tilde)
 					m.addGenConstrPWL(theta, theta_tilde, [0,n_edges-0.001,n_edges,n_edges+1],
 								[0,0, 1, 1])
 						
 			#sum of theta tildes should be greater than 1,
-			# i.e., at least all constraints for one cnvx region should be satisfied
+			# i.e., all constraints for at least one cnvx region should be satisfied
 			a = np.ones((1,len(theta_tildes)))
 			m.addMConstr(a, theta_tildes, GRB.GREATER_EQUAL, np.array([1]))
 					
@@ -288,6 +365,11 @@ class DTR:
 		
 		#TODO - feasability checking/handling
 		#assert m.status == 2, '
+
+		#Troubleshooting
+		# _vars = m.getVars()
+		# for _var in _vars:
+		# 	print(_var.getAttr('VarName'), _var.getAttr('X'))
 		
 		#and extract the optimal values
 		x = []
