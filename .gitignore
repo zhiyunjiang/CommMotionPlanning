@@ -8,4 +8,5 @@ __pycache__/
 .*
 !/.gitignore
 *.eps
-
+*.log
+python/.ipynb_checkpoints/**

@@ -2,10 +2,6 @@ import numpy as np
 from matplotlib import pyplot as plt
 from matplotlib.colors import ListedColormap
 
-#The MIQCP Solver
-import gurobipy as gp
-from gurobipy import GRB
-
 #Import a few utility functions...
 import sys 
 from pathlib import Path
@@ -22,6 +18,8 @@ import MarkovianRP as MRP
 from CoordTransforms import toRawFromGrid
 from CoordTransforms import toGridFromRaw
 import pointcloud as PC
+import shot_solvers as SHOT
+import gurobi_solvers as GB
 
 #Delay-Tolerant Relay System
 class DTR:
@@ -35,32 +33,25 @@ class DTR:
 		self.p_th = p_th
 		self.gamma_th = th
 		self.region = region
-		self.res = channels[0].res
-		self.findJointConnectivityField()
-		self.Xis = [_indices_to_pts(cf, self.region, self.res) for cf in self.cfields]
+		pfs = [cc.getPConField(self.gamma_th) for cc in self.channels]
+		self.cfields = [1*((pfs[2*i]*pfs[2*i+1]) > self.p_th) for i in range(self.n)]
+		self.Xis = [_indices_to_pts(self.cfields[i], channels[i*2].region, channels[i*2].res) for i in range(self.n)]
+		
 		self.cregions = [ PC.PointCloud(Xi['points']) for Xi in self.Xis]
-		for pc in self.cregions:
-    			pc.partition(algo=4, alpha = 0.5/self.res)
+		for i in range(self.n):
+		
+			self.cregions[i].partition(algo=4, alpha = 0.5/self.channels[i].res)
 
 		self.ps = PS.PollingSystem(ls, beta)
 
-		
-	def findJointConnectivityField(self):
-		#old way to do it, which just needs both to be above the threshold
-		#self.cfs = [cc.getConnectionField(th) for cc in channels]
-		#self.cfields = [(i+1)*(self.cfs[2*i]*self.cfs[2*i+1]) for i in range(len(ls))]
-		
-		pfs = [cc.getPConField(self.gamma_th) for cc in self.channels]
-		self.cfields = [1*((pfs[2*i]*pfs[2*i+1]) > self.p_th) for i in range(self.n)]
-
-	def optimize(self, do_plot=True, x_opt_method = 0, verbose = False):
+	def optimize(self, do_plot=True, x_opt_method = 0, verbose = False, v=1):
 		converged = False
 		#initialize policy and polling locations
 		pi = MRP.build_ed_policy(self.ps.Ls, self.ps.beta)
 		#randomly sample points from Xis
 		X = self._pick_random_X()
 		Xs = [X]
-		S = XtoS(np.copy(X))
+		S = XtoS(np.copy(X), v)
 		it_count = 0
 		max_it = 500
 		Wprev = np.inf
@@ -69,8 +60,7 @@ class DTR:
 			res = self.ps.calc_optiaml_rp(S)
 			pi = res.x
 			W = res.fun
-			if it_count%50 == 0 and verbose:
-				print("Optimized Policy Waiting Time: %.4f"%(W))
+
 			#Now update the coordinates
 			if x_opt_method == 0:
 				X = self._simple_gradient(X, S, pi, _lr(it_count))
@@ -80,17 +70,15 @@ class DTR:
 				base_temp = 100
 				X = self._Metropolis(X,S,pi, temp=100/(1 + it_count//25))
 			elif x_opt_method ==3:
-				X, _ = self._find_min_PWD_CPlex(pi)
+				X, _ = SHOT.min_PWD(self.cregions, pi, 1,verbose)
 			Xs.append(np.copy(X))
 			rp = MRP.RandomRP(pi)
-			S =  XtoS(X)
+			S =  XtoS(X,v)
 			W = self.ps.calc_avg_wait(rp, S)
 			if verbose:
 				print('Transition probabilities: ', pi)
 				print('Points: ', X)
-				print("Optimized Location Waiting Time: %.4f"%(W))
-			if it_count%50 == 0 and verbose:
-				print("Optimized Location Waiting Time: %.4f"%(W))
+				print("Optimized Waiting Time: %.4f"%(W))
 			it_count += 1
 
 			eps = 0.01
@@ -129,262 +117,14 @@ class DTR:
 		plt.show()
 		if save:
 			plt.savefig('sim_pairs_%d_pth_%.2f_gammath_%d'%(self.n, self.p_th, self.gamma_th),format='png')
-
-	#Private Functions	
-	def _find_min_PWD(self, pi):
-		#To use Gurboi, the objective must be linear or quadratic	
-		m = gp.Model('min_pairwise_distance')
-		#Let's keep this nice and quiet
-		#m.Params.OutputFlag = 0
-		#setup dummy variables required for linear objective
-		n_regions = len(self.cregions)
-		s = []
-		s_obj = []
-		for i in range(n_regions):
-			for j in range(i+1, n_regions):
-				s.append(m.addVar())
-				s_obj.append(pi[i]*pi[j]*s[-1])	
-
-		m.setObjective(np.sum(s_obj))
-		xs = [m.addVar() for i in range(n_regions)]
-		ys = [m.addVar() for i in range(n_regions)]
-		
-		#add constraints to couple new dummy vars to relay postitions
-		ij = 0
-		for i in range(n_regions):
-			for j in range(i+1, n_regions): 
-				#add the quadratic constraint that ||xi - xj||^2 = sij^2
-				M = np.array([[1,0,0, 0, 0],[0,-1,1, 0, 0],[0,1,-1, 0, 0], [0, 0, 0, -1, 1], [0, 0, 0, 1, -1]])
-				xc=[s[ij], xs[i], xs[j], ys[i], ys[j]]
-				m.addMQConstr(M,None, GRB.EQUAL, 0, xc, xc)
-				ij += 1
-	
-		#constrain relay points to lie within their regions
-		eta = []
-		for i in range(n_regions):
-			reg = self.cregions[i]
-			As = np.zeros((0,2))
-			bs = []
-			Cs = []
-		       
-			n_vars = 2
-			for poly in reg.polygons:
-				for cnvx in poly.cnvx_partition:
-					n_vars += 1
-					Aik,bik = cnvx.to_linear_constraints()
-					As = np.concatenate((As,Aik), axis = 0)
-					C = 1*10000*np.ones(len(bik)) #actually need to find a value of this constant
-					Cs.append(C)
-					bs += (bik[:,0]+C).tolist()
-		    
-			eta_i = [m.addVar(vtype=GRB.BINARY) for k in range(n_vars-2)]
-			eta.append(eta_i)
-			m.addConstr(np.sum(eta_i) == 1)
-			eta.append(eta_i)
-			n_constraints = len(bs)
-			A = np.zeros((n_constraints, n_vars))
-			A[:,:2] = As
-			idx = 0
-			for j in range(n_vars - 2):
-				C = Cs[j]
-				lc = len(C)
-				A[idx:idx+lc, 2+j] = C
-				idx += lc
-			
-			b = np.array(bs)
-		    
-			LMC = m.addMConstr(A, [xs[i], ys[i] , *eta_i], GRB.LESS_EQUAL, b)
-		    
-		#and now solve
-		m.params.NonConvex = 2
-		m.optimize()
-		
-		#TODO - feasability checking/handling
-		#assert m.status == 2, '
-		
-		#and extract the optimal values
-		x = []
-		for i in range(n_regions):
-			x.append([xs[i].x, ys[i].x])
-
-		#return the points as well as the optimal value
-		return np.array(x), m.getObjective().getValue()
-		
-		
-		
-	def _find_min_PWD_CPlex(self, pi):
-		""""
-		IBM's CPlex studio cannot handle quadratic equality constraints nor anything beyond quadratic terms in the objective,
-		so this method will always result in an error. See 
-		https://www.ibm.com/docs/en/icos/12.7.1.0?topic=smippqt-miqcp-mixed-integer-programs-quadratic-terms-in-constraints for details.
-		"""
-	
-		from docplex.mp.model import Model
-		from docplex.mp.constr import QuadraticConstraint, ComparisonType	
-		mdl = Model(name='min_pairwise_distance')
-		n_regions = len(self.cregions)
-		s=[]
-		k=[]
-		for i in range(n_regions):
-			for j in range(i+1, n_regions):
-				s.append(mdl.continuous_var())
-				k.append(pi[i]*pi[j])
-
-		mdl.minimize(mdl.sum([k[i]*s[i] for i in range(len(s))]))
-
-		#set up variables needed for objective
-		xs = mdl.continuous_var_list(n_regions, lb=self.region[1], ub=self.region[0])
-		ys = mdl.continuous_var_list(n_regions, lb=self.region[3], ub=self.region[2])
-
-		#add constraints to couple new dummy vars to relay postitions
-		qcs=[]
-		for i in range(n_regions):
-			for j in range(i+1, n_regions):
-				qcs.append( QuadraticConstraint(mdl, mdl.sum_squares( [(xs[i]-xs[j]), (ys[i]-ys[j])] ), ComparisonType.EQ, mdl.sum_squares([s[len(qcs)]]) ))
-		#Not sure this is necessary        
-		mdl.add_quadratic_constraints(qcs)
-
-
-		C = 10000 #actually need to find a value of this constant
-		#Constrain relay points to lie within their regions
-		for i in range(n_regions):
-			reg = self.cregions[i]    
-			mk=0
-			eta_i = []
-			for poly in reg.polygons:
-				for cnvx in poly.cnvx_partition:
-					eta_ik = mdl.binary_var()
-					eta_i.append(eta_ik)
-				mk+=1
-				Aik,bik = cnvx.to_linear_constraints()
-				
-				bik[:,0] += C
-
-				for j in range(len(bik)):
-				#add the linear constraint
-					mdl.add_constraint_(mdl.le_constraint(Aik[j,0]*xs[i] + Aik[j,1]*ys[i] +C*eta_ik ,bik[j,0]))
-		
-			#we must be in exactly one of the subregions
-			mdl.add_constraint(mdl.eq_constraint(mdl.sum(eta_i), 1))
-
-
-		sol = mdl.solve()
-		argmin = None
-		min_val = float('inf')
-		if sol is not None:
-			#extract x and y values
-			argmin = []
-			for i in range(n_regions):
-				argmin.append([xs[i].solution_value(), ys[i].solution_value()])
-			argmin = np.array(argmin)
-			#extract min val
-			min_val = sol.get_objective_value()
-
-		return argmin, min_val
-		
-	def _find_min_PWDalt(self, pi):
-		#use a series of piecewise linear constraints rather than binary variables
-		
-		#To use Gurboi, the objective must be linear or quadratic	
-		m = gp.Model('min_pairwise_distance')
-		#Let's keep this nice and quiet
-		m.Params.OutputFlag = 0
-		#setup dummy variables required for linear objective
-		n_regions = len(self.cregions)
-		s = []
-		s_obj = []
-		for i in range(n_regions):
-			for j in range(i+1, n_regions):
-				s.append(m.addVar())
-				s_obj.append(pi[i]*pi[j]*s[-1])	
-
-		m.setObjective(np.sum(s_obj))
-		xs = [m.addVar() for i in range(n_regions)]
-		ys = [m.addVar() for i in range(n_regions)]
-		
-		
-		#add constraints to couple new dummy vars to relay postitions
-		#identical to MI formulation
-		ij = 0
-		for i in range(n_regions):
-			for j in range(i+1, n_regions): 
-				#add the quadratic constraint that ||xi - xj||^2 = sij^2
-				M = np.array([[1,0,0, 0, 0],[0,-1,1, 0, 0],[0,1,-1, 0, 0], [0, 0, 0, -1, 1], [0, 0, 0, 1, -1]])
-				xc=[s[ij], xs[i], xs[j], ys[i], ys[j]]
-				m.addMQConstr(M,None, GRB.EQUAL, 0, xc, xc)
-				ij += 1
-	
-		#constrain relay points to lie within their regions
-		#using a series of linear and piecewise linear equality constraints
-		for i in range(n_regions):
-			reg = self.cregions[i]
-			theta_tildes = []
-			k=0
-			for poly in reg.polygons:
-				for cnvx in poly.cnvx_partition:
-					k+=1
-					Aik,bik = cnvx.to_linear_constraints()
-					#recall Aik [x,y]^T -b<0 if [x,y] in polygon
-					#=> -Aik[x,y]^T +b > 0 if [x,y] in polygon
-					#=>z = -Aik[x,y]^T +b => z+Aik[x,y]=b
-					n_edges = len(bik)
-					Aik_aug = np.zeros((n_edges,2+n_edges))
-					Aik_aug[:,:2] = Aik
-					Aik_aug[:,2:] = np.eye(n_edges)
-
-					zs = [m.addVar(lb=float('-inf')) for j in range(n_edges)]
-					m.addMConstr(Aik_aug, [xs[i], ys[i], *zs ], GRB.EQUAL, bik)
 					
-					ztildes = [m.addVar(lb=float('-inf'), name='z tilde %d.%d.%d'%(i,k,j)) for j in range(n_edges)]
-					for j in range(n_edges):
-						#first of the piecewise constraints
-						m.addGenConstrPWL(zs[j], ztildes[j], [-1,0,1],[-1000, 1, 1])
-					
-					#dummy variable for checking how many constraints are satisfied
-					theta = m.addVar(lb=float('-inf'), name='theta %d.%d'%(i,k))
-					a = np.ones((1, n_edges+1))
-					a[0,-1] = -1
-					m.addMConstr(a, [*ztildes, theta], GRB.EQUAL, np.array([0]))
-					
-					# saturate so that theta_tilde is 1 if all constraints satisfied,
-					# ~0 otherwise
-					theta_tilde = m.addVar(name='theta tilde %d.%d'%(i,k))
-					theta_tildes.append(theta_tilde)
-					m.addGenConstrPWL(theta, theta_tilde, [0,n_edges-0.001,n_edges,n_edges+1],
-								[0,0, 1, 1])
-						
-			#sum of theta tildes should be greater than 1,
-			# i.e., all constraints for at least one cnvx region should be satisfied
-			a = np.ones((1,len(theta_tildes)))
-			m.addMConstr(a, theta_tildes, GRB.GREATER_EQUAL, np.array([1]))
-					
-		    
-		#and now solve
-		m.params.NonConvex = 2
-		m.optimize()
-		
-		#TODO - feasability checking/handling
-		#assert m.status == 2, '
-
-		#Troubleshooting
-		# _vars = m.getVars()
-		# for _var in _vars:
-		# 	print(_var.getAttr('VarName'), _var.getAttr('X'))
-		
-		#and extract the optimal values
-		x = []
-		for i in range(n_regions):
-			x.append([xs[i].x, ys[i].x])
-
-		#return the points as well as the optimal value
-		return np.array(x), m.getObjective().getValue()
 
 	def _simple_gradient(self, X, S, pi, lr):
 		Xnext = np.copy(X)
 		for i in range(self.n):
 			grad = self._grad_xi(i, X, S, pi)
 			Xnext[i] = X[i] - lr*grad
-			idx = toGridFromRaw(self.region, self.res, Xnext[i])
+			idx = toGridFromRaw(self.channels[i].region, self.channels[i].res, Xnext[i])
 			#make sure we're still in the region
 			if not self.cfields[i][idx[0][0], idx[1][0]]:
 				Xnext[i] = X[i]
@@ -398,14 +138,14 @@ class DTR:
 		neighborhood = [[1,1],[1,0],[1,-1],[0,1],[0,0],[0,-1],[-1,1],[-1,0],[-1,-1]]
 		for it in range(max_it):
 			for i in range(self.n):
-				idx = toGridFromRaw(self.region, self.res, Xnext[i]).reshape(2)
+				idx = toGridFromRaw(self.channels[i].region, self.channels[i].res, Xnext[i]).reshape(2)
 				scores = np.Inf*np.ones(9)
 				for j in range(9):
 					neighbor = idx + neighborhood[j]
 					#index in region and is connected
 					if (neighbor >= 0).all() and (neighbor < shape).all() and self.cfields[i][neighbor[0], neighbor[1]] :
 						Xtemp = np.copy(Xnext)
-						xitemp = toRawFromGrid(self.region, self.res, neighbor)
+						xitemp = toRawFromGrid(self.channels[i].region, self.channels[i].res, neighbor)
 						Xtemp[i] = xitemp
 						S =  XtoS(Xtemp)
 						scores[j] = self.ps.calc_avg_wait(rp, S)
@@ -416,7 +156,7 @@ class DTR:
 				scores = scores/np.sum(scores)
 				neighbor_idx = np.random.choice(9,p=scores)
 				neighbor = idx + neighborhood[neighbor_idx]
-				Xnext[i] = toRawFromGrid(self.region, self.res, neighbor)
+				Xnext[i] = toRawFromGrid(self.channels[i].region, self.channels[i].res, neighbor)
 		#print(Xnext)
 		return Xnext
 
@@ -467,6 +207,5 @@ def XtoS(X, v = 1):
 def _indices_to_pts(r, region, res):
     #First get the non-zero indices
     idcs = np.array(np.where(r>0)).T
-    pts = idcs - [region[1], region[3]]
-    pts = pts/res
+    pts = toRawFromGrid(region, res, idcs)
     return {'points': pts, 'indices': idcs}

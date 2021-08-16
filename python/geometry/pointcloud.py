@@ -16,6 +16,9 @@ from rdp import rdp
 
 #triangulation that can handle holes
 import triangle
+import shapely.geometry as sg
+from shapely.ops import nearest_points
+import numpy as np
 
 
 class PointCloud():
@@ -23,6 +26,11 @@ class PointCloud():
 	def __init__(self, points):
 		self.points = points
 		self.polygons = None
+		self.mk = 0
+		self.xmin = self.points[:,0].min()
+		self.xmax = self.points[:,0].max()
+		self.ymin = self.points[:,1].min()
+		self.ymax = self.points[:,1].max()
 		
 	def partition(self, alpha=0.01, algo = 0):
 		if self.polygons is None:
@@ -30,13 +38,29 @@ class PointCloud():
 		
 		return self.polygons
 		
-	def plot(self, frmt = ''):
-		plt.plot(self.points[:,0], self.points[:,1], frmt)
+	def plot(self):
+		plt.scatter(self.points[:,0], self.points[:,1])
 		
 	def plot_polys(self, show_partition=True):
 		if self.polygons is not None:
 			for poly in self.polygons:
 				poly.plot(show_partition)
+				
+	def distToPC(self, other):
+		min_dist = float('inf')
+		argmin = None
+		for poly in self.polygons:
+			for other_poly in other.polygons:
+				poly1 = sg.Polygon(poly.points)
+				poly2 = sg.Polygon(other_poly.points)
+				pts = nearest_points(poly1, poly2)
+				p1 = np.array([pts[0].x, pts[0].y])
+				p2 = np.array([pts[1].x, pts[1].y]) 
+				dist = np.linalg.norm(p1-p2)
+				if dist < min_dist:
+					min_dist = dist
+					argmin = (p1, p2)
+		return min_dist, argmin	
 		
 	def _find_polys(self, alpha, algo):
 		#find the polygons using alphashapes, then extract
@@ -69,6 +93,7 @@ class PointCloud():
 				mask.append(i)
 				
 		self.polygons = [self.polygons[m] for m in mask]
+
 		
 		print('Constructed %d possibly non-convex polygons'%(len(self.polygons)))
 		#now decompose each polygon
@@ -80,6 +105,8 @@ class PointCloud():
 			n_subregions += len(poly.cnvx_partition)
 
 		print('%d total subregions'%(n_subregions))
+
+		self.mk = n_subregions
 		
 	def _build_polys(incompletes):
 		completes = []
@@ -482,14 +509,21 @@ class Poly:
 		a2 = p2 - p1
 		theta = (np.arctan2(a1[1], a1[0]) + np.arctan2(a2[1], a2[0]))/2
 		v = np.array([np.cos(theta), np.sin(theta)])
-		r = 0.001
+		r = 0.0001
 		
 		pi = p1 + r*v
 		
 		if not self.contains_point(pi):
-			pi = p1 - r*v
+			for d in np.linspace(np.pi, 3*np.pi, num=200):
+				v = np.array([np.cos(theta+d), np.sin(theta+d)])
+				pi = p1 + v*r 
+				if self.contains_point(pi):
+					break;
 			if not self.contains_point(pi):
-				print('WARNING: get_interior_point did not get an interior point')
+				print('WARNING: get_interior_point did not get an interior point.\nPoint: %s\n%s'%(str(pi), str(self)))
+				plt.plot(pi[0], pi[1])
+				self.plot(show_partition = False)
+				plt.show()
 		return pi
 
 

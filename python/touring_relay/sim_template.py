@@ -139,13 +139,12 @@ def plotCFwithOverlay(n, tjcps, pjcps, qBase, region):
 	plt.ylabel('y (m)')
 	#plt.legend()
 	
-def setup_polling_sys(pcs, region, els, beta, GAMMA_TH, p_th):
-	sys = dtr.DTR(pcs, region, els, beta, th=GAMMA_TH, p_th = p_th)
-	#find the AORP
-	W, pi, X = sys.optimize(x_opt_method=3, do_plot = False)
+
+def calc_AORP(dt_sys, vel):
+	W, pi, X = dt_sys.optimize(x_opt_method=3, do_plot = False, verbose=False, v=vel)
 	AORP = {'WT': W, 'X': X, 'pi': pi}
-	return sys, AORP
-	
+	return AORP
+
 def plot_regional_decomposition(dt_sys, tjcps, pjcps, qBase, region):
 	plt.rcParams.update({'font.size': 22})
 	plotCFwithOverlay(dt_sys.n, tjcps, pjcps, qBase, region)
@@ -193,44 +192,41 @@ def plot_els_w_pis(els, pis):
 	plt.ylim(0,1.1)
 	#fig.tight_layout()
 	
-def run_sims(ps, AORP, TSPNP, hrs, mins, seconds, motion_power, tx_power):
+def run_sims(ps, AORP, TSPNP, hrs, mins, seconds, motion_power, tx_power, v=1):
 	minutes = hrs*60+mins
 	seconds = minutes*60 + seconds
 	#look at policy-invariant values
 	print("Theotretical MB serviced: " + str(ps.LSys()*seconds))
 	AP = ps.RhoSys()*tx_power + (1-ps.RhoSys())*motion_power
-	print("Theoretical Energy Consumption Over 1 Hr (J)" + str(AP*seconds))
+	print("Theoretical Energy Consumption (J): " + str(AP*seconds))
 
-	print('\tTh. WT\tWT\tE (J)\tMB')	
+	print('\tTh. WT\tWT\tE (J)\tMBS\tMBR')	
 	#and now run the sims
-	S =  dtr.XtoS(AORP['X'])
+	S =  dtr.XtoS(AORP['X'],v)
 	pi = AORP['pi']
 	#now run a bunch of simulations and look at the averages
 
 	#first run for AORP
 	aorp = MRP.RandomRP(pi)
 	AORP_res, AORP_xt = runsimsforpolicy(ps, aorp, S, motion_power, tx_power, seconds)
-	print('AORP\t%.2f\t%.2f\t%.2f\t%.2f'%(AORP['WT'], AORP_res['WT'], AORP_res['E'], AORP_res['MB']))
+	print('AORP\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f'%(AORP['WT'], AORP_res['WT'], AORP_res['E'], AORP_res['MBS'], AORP_res['MBR']))
 
-	#now run for cyclical policy
-	cyrp = SRP.SRPInOrder(len(pi))
-	cy_seq = cyrp.seq
-	cyS = [ S[(cy_seq[i]), (cy_seq[(i+1)%ps.n])] for i in range(ps.n)]
-	th_cy_wt = ps.calc_avg_wait(cyrp, np.array(cyS))
-	cyrp_res, cyrp_xt = runsimsforpolicy(ps, cyrp, S, motion_power, tx_power, seconds)
-	print('Cyc\t%.2f\t%.2f\t%.2f\t%.2f'%(th_cy_wt, cyrp_res['WT'], cyrp_res['E'], cyrp_res['MB']))
+	#also look at what happens if we try the Markoviian routing policy
+	# mrp = MRP.MarkovianRP(P)
+	# MRP_res, MRP_xt = runsimsforpolicy(ps, mrp, S, motion_power, tx_power, seconds)
+	# print('MRP\t---\t%.2f\t%.2f\t%.2f'%(MRP_res['WT'], MRP_res['E'], MRP_res['MB']))
 
 	rtable = SRP.SRPFromPis(pi, eps=0.1)
 	rtable_res, rtable_xt = runsimsforpolicy(ps, rtable, S, motion_power, tx_power, seconds)
-	print('Tab\t---\t%.2f\t%.2f\t%.2f'%(rtable_res['WT'], rtable_res['E'], rtable_res['MB']))
+	print('Tab\t---\t%.2f\t%.2f\t%.2f\t%.2f'%(rtable_res['WT'], rtable_res['E'], rtable_res['MBS'], rtable_res['MBR']))
 	
 	#Run baseline (TSPN) policy
-	S_TSPN = dtr.XtoS(TSPNP['X'])
+	S_TSPN = dtr.XtoS(TSPNP['X'],v)
 	tspnp = SRP.StaticRP(list(TSPNP['SEQ']))
 	tspn_res, tspn_xt = runsimsforpolicy(ps, tspnp, S_TSPN, motion_power, tx_power, seconds)
-	print('TSPN\t---\t%.2f\t%.2f\t%.2f'%(tspn_res['WT'], tspn_res['E'], tspn_res['MB']))
+	print('TSPN\t---\t%.2f\t%.2f\t%.2f\t%.2f'%(tspn_res['WT'], tspn_res['E'], tspn_res['MBS'], tspn_res['MBR']))
 	
-	return AORP_res, AORP_xt, cyrp_res, cyrp_xt, rtable_res, rtable_xt, tspn_res, tspn_xt
+	return AORP_res, AORP_xt, rtable_res, rtable_xt, tspn_res, tspn_xt
 	
 def plotLast10Min(xt):
 	xt = np.array(xt)
@@ -252,18 +248,18 @@ def plotLast10Min(xt):
 #######################################################
 def runsimsforpolicy(ps, rp, S, motion_power, tx_power, seconds, n_trials = 20):
 	FAWT = 0
-	TMB = 0
+	TMBS = 0 #total mb serviced
+	TMBR = 0 #total mb remaining
 	TE = 0
 	for i in range(n_trials):
 		xt, wt, queues, total_travel_time = ps.simulate(rp, S, seconds)
 		FAWT += wt[-1][1]
-		MB_serviced = 0
-		for q in queues:
-			MB_serviced += len(q.wait_times)
-		TMB += MB_serviced
+		MB_serviced = sum([len(q.wait_times) for q in queues])
+		TMBS += MB_serviced
+		TMBR += sum([len(q.waiting) for q in queues])
 		TE += motion_power*total_travel_time + tx_power*ps.beta*MB_serviced
 
-	return {'WT': FAWT/n_trials, 'MB': TMB/n_trials, 'E': TE/n_trials}, xt
+	return {'WT': FAWT/n_trials, 'MBS': TMBS/n_trials, 'MBR': TMBR/n_trials, 'E': TE/n_trials}, xt
 	
 def prob_pred_in_true(tjcf, idxs):
 	n_in = 0
@@ -280,6 +276,3 @@ def prob_pred_in_true(tjcf, idxs):
 def field_to_pts(field, region, res):
 	idcs = np.array(np.where(field>0)).T 
 	return toRawFromGrid(region, res, idcs)
-	
-	
-   
