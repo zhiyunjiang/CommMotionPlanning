@@ -11,9 +11,11 @@ sys.path.insert(0, str(top_dir.absolute())+"\\geometry")
 import shot_solvers as SHOT
 import gurobi_solvers as GB
 
-def _unique_cycles(n):
+def _unique_cycles(n, hint):
 	permutes = permutations(range(n))
 	pruned_permutes = []
+	if hint is not None:
+		pruned_permutes.append(hint)
 	for permute in permutes:
 		if (permute[0] == 0) and not _flipped(permute) in pruned_permutes:
 			pruned_permutes.append(permute)
@@ -32,7 +34,7 @@ def lb(dm, p):
 	return bound
 	
 
-def TSPN_BF(regions):
+def TSPN_BF(regions, hint=None):
 	t = time.time()
 	n = len(regions)
 
@@ -47,7 +49,9 @@ def TSPN_BF(regions):
 			min_dists[j, i] = d
 	bsf = np.inf
 	argmin = None
-	Ps = _unique_cycles(n)
+
+	Ps = _unique_cycles(n, hint)
+
 	print('Total of %d Permutations to Try'%(len(Ps)))
 	for P in Ps:
 		print('Working on Permutation ' + str(P))

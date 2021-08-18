@@ -47,17 +47,22 @@ class DTR:
 	def optimize(self, do_plot=True, x_opt_method = 0, verbose = False, v=1):
 		converged = False
 		#initialize policy and polling locations
-		pi = MRP.build_ed_policy(self.ps.Ls, self.ps.beta)
+		pi = MRP.build_ed_policy(self.ps.Ls, self.ps.beta).pi
 		#randomly sample points from Xis
 		X = self._pick_random_X()
+		argmin = (X, pi)
+		min_W = float('inf')
 		Xs = [X]
 		S = XtoS(np.copy(X), v)
 		it_count = 0
-		max_it = 500
+		it_wo_improvement = 0
+		max_it = 50
+		max_it_wo_improvement = 10
 		Wprev = np.inf
-		while (not converged) and (it_count < max_it):
+
+		while (not converged) and (it_count < max_it) and (it_wo_improvement < max_it_wo_improvement):
 			#first, find optiaml pi
-			res = self.ps.calc_optiaml_rp(S)
+			res = self.ps.calc_optimal_rp(S)
 			pi = res.x
 			W = res.fun
 
@@ -78,9 +83,13 @@ class DTR:
 			if verbose:
 				print('Transition probabilities: ', pi)
 				print('Points: ', X)
-				print("Optimized Waiting Time: %.4f"%(W))
+			print("Optimized Waiting Time: %.4f"%(W))
 			it_count += 1
-
+			it_wo_improvement += 1
+			if  W < min_W:
+				min_W = W
+				argmin= (X, pi)
+				it_wo_improvement = 0
 			eps = 0.01
 			if abs(W - Wprev) <= eps:
 				converged = True
@@ -89,7 +98,7 @@ class DTR:
 			self.plot_optimization(X)
 		if verbose:
 			print("Optimized Waiting Time: %.4f"%(Wprev))
-		return W, pi, X
+		return min_W, argmin[1], argmin[0]
 		
 	def naive_policy(self):
 		weights = np.ones(self.n)

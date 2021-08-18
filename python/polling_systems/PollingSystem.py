@@ -36,7 +36,7 @@ class PollingSystem:
 		return self.beta * self.LSys()
 
 
-	def calc_optiaml_rp(self, S):
+	def calc_optimal_rp(self, S):
 		#start out assuming frequencies directly proportional to arrival rates
 		x0 = self.Ls/self.LSys()
 		sys_wait = lambda x: self._calc_avg_wait_random(x, S)
@@ -55,7 +55,7 @@ class PollingSystem:
 		if isinstance(rp, RandomRP):
 			return self._calc_avg_wait_random(rp.pi, S)
 		elif isinstance(rp, CyclicRP):
-			return self._calc_avg_wait_cyclic(rp, S)
+			return self._calc_avg_wait_cyclic(S)
 		else:
 			print("Theoretical Waiting Time calculation only implemented for clyclic and random policies.\n")
 			return -1
@@ -106,6 +106,9 @@ class PollingSystem:
 		wt.append([tmax, sys_avg_wait])
 		#print("System Average Wait Time: %.4f"%(sys_avg_wait))
 
+		# if burndown:
+		# 	#finishg servicing the mb remaining in the queues.
+
 		return xt, wt, queues, total_travel_time
 
 
@@ -155,7 +158,7 @@ class PollingSystem:
 
 		return np.reshape(term1 *(term2 + term3 - term4 + term5 ), 1)[0]
 		
-	def _calc_avg_wait_cyclic(self, rp, S):
+	def _calc_avg_wait_cyclic(self, S):
 		"""
 		Based on "Workloads and Waiting Times in Single-Server Systems with Multiple Customer Classes" (Boxma, 1989)
 		"""
