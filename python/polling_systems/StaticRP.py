@@ -59,7 +59,7 @@ def SRPFromPis(pis, eps=0.01):
 def MinSSRPFromPis(pis, S, eps=0.01):
 	sequence = _seuqnce_from_pi(pis, eps)
 	optimizer = SeqDPOptimizer(sequence, S)
-	sequence = optimizer.optimize()
+	sequence, _ = optimizer.optimize()
 	return TableRP(sequence)
 
 def _seuqnce_from_pi(pis, eps):
@@ -124,7 +124,7 @@ class SeqDPOptimizer:
 		state = [-1 for i in range(self.m)]
 		# print(argmin)
 		for arg in argmin:
-			v,c,state = self._tx(state, arg)
+			v,c,state = self._tx(state, arg[0], arg[1])
 		return state
 
 	def _optimize_recur(self, state, opts):
@@ -136,26 +136,27 @@ class SeqDPOptimizer:
 			return optimal[0], optimal[1]
 
 		min_2go = float('inf')
-		argmin = [-1]
+		argmin = [(-1, -1)]
 		for opt in opts:
-			is_valid, stage_cost, nxt_state = self._tx(state, opt)
-			if is_valid:
-				nxt_opts = [o for o in opts if o != opt]
+			for i in range(len(self.spacings[opt])):
+				is_valid, stage_cost, nxt_state = self._tx(state, opt, i)
+				if is_valid:
+					nxt_opts = [o for o in opts if o != opt]
 
-				#handle base case
-				cost_2_go = 0
-				argmin_2go = []
-				if len(nxt_opts) != 0:
-					# print('had available actions')
-					cost_2_go, argmin_2go = self._optimize_recur(nxt_state, nxt_opts)
-				cost_from_here = cost_2_go + stage_cost
+					#handle base case
+					cost_2_go = 0
+					argmin_2go = []
+					if len(nxt_opts) != 0:
+						# print('had available actions')
+						cost_2_go, argmin_2go = self._optimize_recur(nxt_state, nxt_opts)
+					cost_from_here = cost_2_go + stage_cost
 
-				if cost_from_here < min_2go:
-					# print('Updating min2go and argmin:')
-					# print(min_2go)
-					# print(argmin)
-					min_2go = cost_from_here
-					argmin = [opt] + argmin_2go
+					if cost_from_here < min_2go:
+						# print('Updating min2go and argmin:')
+						# print(min_2go)
+						# print(argmin)
+						min_2go = cost_from_here
+						argmin = [(opt,i)] + argmin_2go
 
 		self.optimal_cost2go[state_key] = (min_2go, argmin)
 		return min_2go, argmin
@@ -163,7 +164,7 @@ class SeqDPOptimizer:
 	def _state_to_str(state):
 		return ','.join(str(x) for x in state)
 
-	def _tx(self, state, opt):
+	def _tx(self, state, opt, i_spc):
 		valid_transition = True
 		
 		nxt_state = [s for s in state]#create deep copy of the state
@@ -183,7 +184,7 @@ class SeqDPOptimizer:
 			if nxt_state[i_nxt] != -1:
 				cost += self.S[opt, state[i_nxt]]
 			nxt_state[i_start] = opt
-			spc = spacing[j]
+			spc = spacing[(j+i_spc)%n]
 			i_start = (i_start + spc) % self.m
 
 			if ((nxt_state[i_start] != -1) and j <(n-1) ) or ( (j==n-1) and (nxt_state[i_start] != opt) ):

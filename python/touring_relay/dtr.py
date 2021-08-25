@@ -75,7 +75,8 @@ class DTR:
 				base_temp = 100
 				X = self._Metropolis(X,S,pi, temp=100/(1 + it_count//25))
 			elif x_opt_method ==3:
-				X, _ = SHOT.min_PWD(self.cregions, pi, 1,verbose)
+				X, _ = SHOT.min_PWD(self.cregions, pi, 1, verbose)
+				# X, _ = GB.min_PWD(self.cregions, pi, 1, verbose)
 			Xs.append(np.copy(X))
 			rp = MRP.RandomRP(pi)
 			S =  XtoS(X,v)
