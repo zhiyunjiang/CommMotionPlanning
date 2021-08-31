@@ -7,7 +7,6 @@ class QoSReq:
 		assert (0<= ber <=1), 'QosReq: BER must be in range [0,1]'
 		assert r > 0, 'QoSReq: spectral efficiency r must be positive'
 		assert rx_noise.mW >= 0, 'QoSReq: Receiver noise must be non-negative'
-		
 		self.ber = ber
 		self.r = r
 		self.rx_noise = rx_noise
@@ -29,11 +28,11 @@ class QoSReq:
 		return self._calcPower(exp_CNR_lin_inverse)
 		
 	def _toLinCNR(self, channel_power_dBm):
-		return 10**(channel_power_dBm/10)/self.rx_Noise.mW
+		return 10**(channel_power_dBm/10)/self.rx_noise.mW
 		
 	def _calcPower(self, CNR_lin_inverse):
 		power_mW = ((2**(self.r) -1)/self.k)*CNR_lin_inverse
-		return TXPwr(Pwr.mW2dBm(power_mW))
+		return Pwr(Pwr.mW2dBm(power_mW))
 		
 	def _calcLinCNRThreshold(self, txpwr):
 		CNR_inv = txpwr.W*1000/((2**self.r - 1)/self.k)
@@ -53,6 +52,12 @@ class Pwr(object):
 	def __str__(self):
 		return '%f dBm\t%f dBW\t%f mW\t%f W'%(self._dBm, self._dBW, self._mW, self._W)
 		
+	def __add__(self, other):
+		if type(other)== Pwr:
+			dBm = self.dBm + other.dBm
+			return Pwr(dBm)
+		else:
+			raise TypeError('Expected tpye Pwr but received type %s.'%(str(type(other))))
 	@property
 	def dBm(self):
 		return self._dBm

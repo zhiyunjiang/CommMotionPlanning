@@ -6,16 +6,24 @@ import matplotlib.pyplot as plt
 import sys
 sys.path.insert(0, "../cython")#Needed for cgal partitioning
 
-#CGAL imports
-from CGAL import CGAL_Alpha_shape_2 as CGAL_alphashape
-from CGAL.CGAL_Kernel import Point_2
-import cgal_partition
+
+#CGAL imports, if available
+try:
+	from CGAL import CGAL_Alpha_shape_2 as CGAL_alphashape
+	from CGAL.CGAL_Kernel import Point_2
+	import cgal_partition
+except ModuleNotFoundError:
+	print('CGAL not installed. Will be unable to automactically partition.')
 
 #Ramer-Douglas-Peucker algo
 from rdp import rdp
 
 #triangulation that can handle holes
-import triangle
+try:
+	import triangle
+except ModuleNotFoundError:
+	print('triangle not installed. Will be unable to automactically partition.')
+
 import shapely.geometry as sg
 from shapely.ops import nearest_points
 import numpy as np
@@ -588,6 +596,9 @@ class Poly:
 				A = np.array([-1*d[1]/d[0], 1])
 				b = ( A @ p0)
 			return A, b
+
+		def intersects_segment(self, p1, p2):
+			return segments_intersect(p1, p2, self.points[0], self.points[1])
 				
 
 

@@ -180,6 +180,27 @@ class CommChannel:
 		sample_vals = self.getGammaTOTdBAtPoint(sample_pos)
 		return sample_pos, sample_vals
 
+	"""
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	% getReqTXPowerW
+	%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+	% Calculates the required TX power at a point in the workspace
+	% for a given BER, spectral efficiency, and noise power.
+	%
+	% Input:
+	% self - reference to the CommChannel object
+	% pt - point in question
+	% qos - QoSParams object containiong BER, spectral efficiency, and
+	%       noise power
+	%
+	% Output:
+	% required transmit power at the given point for the given QoS requirement
+	"""
+	def getReqTXPowerAtPoint(self, pt, qos):
+		#TODO - handle points that are outside of the region
+		channel_gain = self.getGammaTOTdBAtPoint(pt)
+		return qos.reqTXPower(channel_gain)
+
 	def getConnectionField(self, gamma_th):
 		"""
 		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -200,27 +221,31 @@ class CommChannel:
 		gamma = self.getGammaTOTdB()
 		return (gamma >= gamma_th)
 
-
+	def getConnectedPoints(self, gamma_th):
+		r = self.getConnectionField(gamma_th)
+		idcs = np.array(np.where(r>0)).T
+		return toRawFromGrid(self.region, self.res, idcs)
 
 	"""
 	Plotting Functions
 	"""
-
-	def plot_channel(self, chnlCmpFlg = 7):
-		fnt_siz = 10
-		"""
-		Plot PL (dB)
-		"""
+	def plot_channel(self, chnlCmpFlg = 7, twod=False):
+		fnt_siz = 20
 
 		vals, title = self._getChannelVals(chnlCmpFlg)
-		fig, ax = plt.subplots(subplot_kw={"projection": "3d"}, figsize=(15,10))
-
-		ax.plot_surface(self.gx, self.gy, vals.T, linewidth=0)#flip back to meshgrid ordering
-
+		if twod:
+			fig, ax = plt.subplots(figsize=(15,10))
+			region = self.region
+			pos = ax.imshow(vals.T, origin = 'lower', vmax=self.cp.kPL, 
+				extent=[region[1],region[0],region[3],region[2]])
+			fig.colorbar(pos, ax=ax)
+		else:
+			fig, ax = plt.subplots(subplot_kw={"projection": "3d"}, figsize=(15,10))
+			ax.plot_surface(self.gx, self.gy, vals.T, linewidth=0)#flip back to meshgrid ordering
+			ax.set_zlabel(title, fontsize= fnt_siz,  fontweight = 'bold')
 		plt.xlabel('x (m)', fontsize= fnt_siz,  fontweight = 'bold')
 		plt.ylabel('y (m)', fontsize= fnt_siz,  fontweight = 'bold')
-		ax.set_zlabel(title, fontsize= fnt_siz,  fontweight = 'bold')
-		plt.show()
+			
 
 	def plotConnectivityField(self, gamma_th):
 		conn_field = self.getConnectionField(gamma_th)
@@ -318,8 +343,8 @@ class PredictedChannel(object):
 		
 	def getConnectedPoints(self, gamma_th):
 		r = self.getConnectionField(gamma_th)
-		idcs = np.array(np.where(r>0)).T
-		return toRawFromGrid(idcs)
+		idcs = np.array(np.where(r)).T
+		return toRawFromGrid(self.region, self.res, idcs)
 
 	def getConnectionField(self, gamma_th):
 		"""
@@ -365,8 +390,8 @@ class PredictedChannel(object):
 		%           gamma_th
 		"""
 		grid_pt = toGridFromRaw(self.region, self.res, pt)
-		mean = self.means[grid_pt[0], grid_pt[1]]
-		variance = self.vars[grid_pt[0], grid_pt[1]]
+		mean = self.means[grid_pt[:,0], grid_pt[:,1]]
+		variance = self.vars[grid_pt[:,0], grid_pt[:,1]]
 
 		return 1 - scipy.stats.norm.cdf(gamma_th, mean, np.sqrt(variance))
                 
