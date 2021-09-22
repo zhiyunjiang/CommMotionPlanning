@@ -75,7 +75,7 @@ class PollingSystem:
 			x = [len(queue.waiting) for queue in queues]
 			xt.append(np.concatenate( (np.array([t, q]), x) ))
 			if stage % 20 == 0:
-				_, sys_avg_wait = self._calc_sim_stats(queues)
+				sys_avg_wait = self._calc_sim_stats(queues)
 				wt.append([t,sys_avg_wait])
 			#check the number of requests currently at queue q
 			reqs = x[q]
@@ -98,16 +98,12 @@ class PollingSystem:
 
 			# account for any processing the server might have done
 			t = t_next
-			if not is_traveling:
-				queues[q].service_complete()
+			if is_traveling:
+				queues[q_prev].service_complete()
 				stage +=1
 
-		_, sys_avg_wait = self._calc_sim_stats(queues)
+		sys_avg_wait = self._calc_sim_stats(queues)
 		wt.append([tmax, sys_avg_wait])
-		#print("System Average Wait Time: %.4f"%(sys_avg_wait))
-
-		# if burndown:
-		# 	#finishg servicing the mb remaining in the queues.
 
 		return xt, wt, queues, total_travel_time
 
@@ -116,16 +112,17 @@ class PollingSystem:
 		"""
 		Currently only works for systems with 3 nodes
 		"""
-		gran = 100
-		pi1 = np.linspace(0,1, gran)
-		pi2 = np.linspace(0,1, gran)
-		Z = np.zeros([gran, gran])
-		for i in range(gran):
-			for j in range(gran):
-				Z[i,j] = self._calc_avg_wait_random( np.array([pi1[i], pi2[j], 1 - pi1[i] - pi2[j]]), S)
-		#now plot this SOB
-		plt.imshow(Z, extent=[0,1,0,1], cmap='hot', interpolation='nearest')
-		plt.show()
+		if self.n == 3:
+			gran = 100
+			pi1 = np.linspace(0,1, gran)
+			pi2 = np.linspace(0,1, gran)
+			Z = np.zeros([gran, gran])
+			for i in range(gran):
+				for j in range(gran):
+					Z[i,j] = self._calc_avg_wait_random( np.array([pi1[i], pi2[j], 1 - pi1[i] - pi2[j]]), S)
+			#now plot this SOB
+			plt.imshow(Z, extent=[0,1,0,1], cmap='hot', interpolation='nearest')
+			plt.show()
 		
 
 	"""
@@ -133,13 +130,17 @@ class PollingSystem:
 	"""
 
 	def _calc_sim_stats(self, queues):
+		sum_of_all_wait_times = 0
+		n_serviced = 0
+		for q in queues:
+			sum_of_all_wait_times += sum(q.wait_times)
+			n_serviced += len(q.wait_times)
+		if n_serviced > 0:
+			sys_avg_wait = sum_of_all_wait_times/n_serviced
+		else:
+			sys_avg_wait = 0
 
-		avg_waits = [queue.avg_wait() for queue in queues]
-		#now find the overall system average
-		weights = self.Ls/self.LSys()
-		sys_avg_wait = np.average(avg_waits, weights = weights)
-
-		return avg_waits, sys_avg_wait
+		return sys_avg_wait
 		
 	def _calc_avg_wait_random(self, pi, S):
 
@@ -149,7 +150,6 @@ class PollingSystem:
 		sk = S @ pi
 		sk_2 = S**2 @ pi
 		rhok = np.reshape(self.Ls * self.beta, (1, self.n))
-
 		term1 = 1/self.RhoSys()
 		term2 = ( self.beta*self.RhoSys()**2 )/ ( 2*(1 - self.RhoSys()) )
 		term3 = (np.transpose(pi) @ sk)/(1-self.RhoSys()) * ( (rhok - rhok**2) @ (1/pi) )
@@ -157,6 +157,18 @@ class PollingSystem:
 		term5 =  (self.RhoSys() * np.transpose(pi) @ sk_2) /(2* ( np.transpose(pi) @ sk) )
 
 		return np.reshape(term1 *(term2 + term3 - term4 + term5 ), 1)[0]
+
+	# def _calc_avg_wait_markov(self, P, S):
+
+	# 	v, M = np.linalg.eig(P.T)
+	# 	pi = M[:,0]/sum(M[:,0]) 
+	# 	s_avg = (S*P.T) @ pi
+	# 	s2_avg = ( (S**2)*P.T) @ pi
+		
+	# 	term1 = 1/self.RhoSys()
+	# 	term2 = (self.RhoSys()/2*s_avg)*s2_avg
+	# 	term3 = (1/s_avg)
+
 		
 	def _calc_avg_wait_cyclic(self, S):
 		"""
@@ -209,7 +221,7 @@ class PollingSystem:
 			t = 0
 			while t <= tmax:
 				#draw the next arrival from the exponential distribution
-				t += rng.exponential(1/self.Ls[q])
+				t += rng.exponential(scale=1/self.Ls[q])
 				if t<=tmax:
 					arrival_times.append((t,q))
 

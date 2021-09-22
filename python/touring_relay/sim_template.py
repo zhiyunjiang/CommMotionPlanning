@@ -104,17 +104,15 @@ def plotDecompFig(n, tjcps, pfs, qBase, region, pt_cld):
 	plt.plot( [-100, -90],  [-100, -90], '-', color='k', markersize=20, label='Convex Partition ($p_{{th}}=0.7$)')
 
 	#plot base stations
-	plt.scatter([qBase[0][0]], [qBase[0][1]], color=color, marker='v', s=200, edgecolor='k', label='Source')
-	plt.scatter([qBase[1][0]], [qBase[1][1]], color=color, marker='^', s=200, edgecolor='k', label='Destination')	
-	
-	# pointcloud.plot_polys()
-	# plt.plot([-100], [-100], '-', color='k', markersize=20, label='Convex Partition')    
+	plt.scatter([qBase[0][0]], [qBase[0][1]], color=color, marker='v', s=400, edgecolor='k', label='Source')
+	plt.scatter([qBase[1][0]], [qBase[1][1]], color=color, marker='^', s=400, edgecolor='k', label='Destination')	    
 
 	plt.xlim(region[1],region[0])
 	plt.ylim(region[2],region[3])
 	plt.xlabel('x (m)')
 	plt.ylabel('y (m)')
-	plt.legend()
+	plt.legend(loc='upper center', bbox_to_anchor=[0.5,-.075], ncol=2)
+	
 	
 		
 def plotCFwithOverlay(n, tjcps, pjcps, qBase, region, els = None, pi = None, ax = None):
@@ -133,7 +131,7 @@ def plotCFwithOverlay(n, tjcps, pjcps, qBase, region, els = None, pi = None, ax 
 		#dummy series for better legend formatting
 		s_label = 'Relay Region %d'%(i+1)
 		if els is not None:
-			s_label += ' ($\\lambda_%d = %.2f$, $\\pi_%d = %.2f$)'%(i+1, els[i], i+1, pi[i])
+			s_label += ' ($\\lambda_%d = %.2f$, $\\tilde{\\pi}_%d = %.2f$)'%(i+1, els[i], i+1, pi[i])
 		ax.plot([-100], [-100], '.', color=colors[i], markersize=ms, label=s_label)
 
 	#dummy series for label
@@ -142,9 +140,9 @@ def plotCFwithOverlay(n, tjcps, pjcps, qBase, region, els = None, pi = None, ax 
 	#plot base stations
 	for i in range(n):
 		ax.scatter([qBase[2*i][0]], [qBase[2*i][1]],
-		color=colors[i], marker='v', s=200, edgecolor='k', zorder=50)
+		color=colors[i], marker='v', s=200, edgecolor='k', zorder=200)
 		ax.scatter([qBase[2*i+1][0]], [qBase[2*i+1][1]],
-		color=colors[i], marker='^', s=200, edgecolor='k', zorder=50)
+		color=colors[i], marker='^', s=200, edgecolor='k', zorder=200)
 	#dummy series for legend formatting
 	ax.scatter([-100], [-100], marker='v', s=4*ms, color='w', edgecolor='k', label='Source')
 	ax.scatter([-100], [-100], marker='^', s=4*ms, color='w', edgecolor='k', label='Destination')
@@ -165,7 +163,7 @@ def plot_regional_decomposition(dt_sys, tjcps, pjcps, qBase, region, els=None, p
 	plotCFwithOverlay(dt_sys.n, tjcps, pjcps, qBase, region, els, pi, ax)
 	
 	for creg in dt_sys.cregions:
-	    	creg.plot_polys()
+	    	creg.plot_polys(ax = ax)
 
 def plot_AORP_W_TSPN(dt_sys, AORP, TSPNP, tjcps, pjcps, qBase, region, els, pi):
 	fig, (ax1, ax2) = plt.subplots(1,2, figsize=(32, 16))
@@ -199,18 +197,18 @@ def plot_AORP_W_TSPN(dt_sys, AORP, TSPNP, tjcps, pjcps, qBase, region, els, pi):
 	#dummy series for all edges
 	ax2.plot([-100, -90], [-100, -100], 'k', label='Routes', markersize = ms)
 	ax2.invert_yaxis()
-
+	ax2.set_title('AORP')
 
 
 	#plot the TSPNP
-	plot_regional_decomposition(dt_sys, tjcps, pjcps, qBase, region, els, pi, ax = ax1)
+	plot_regional_decomposition(dt_sys, tjcps, pjcps, qBase, region, els, pi_obs, ax = ax1)
 	X=TSPNP['X']
 	order = list(TSPNP['SEQ'])
 	order.append(0)#complete the loop
 	ax1.plot(X[order,0], X[order,1], 'k', linewidth = base_width/n, zorder=100, label='Route')
 	_plot_relay_points(X, ax1)
 	ax1.invert_yaxis()
-
+	ax1.set_title('TSPNP')
 
 	handles, labels = ax1.get_legend_handles_labels()
 	fig.legend(handles, labels, fontsize=fs, loc='upper center', bbox_to_anchor=[0.5,0.025], ncol=2)
@@ -315,20 +313,23 @@ def run_sims(ps, AORP, TSPNP, hrs, mins, seconds, motion_power, tx_power, v=1):
 	print('AORP\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f'%(AORP['WT'], AORP_res['WT'], AORP_res['E'], AORP_res['MBS'], AORP_res['MBR']))
 
 	# #also look at what happens if we try the Markoviian routing policy
-	# mrp = MRP.rnd2P(pi, S, alpha=0.05)
+	# mrp = MRP.rnd2P(pi, S, alpha=0.95)
 	# MRP_res, MRP_xt = runsimsforpolicy(ps, mrp, S, motion_power, tx_power, seconds)
 	# print('MRP\t---\t%.2f\t%.2f\t%.2f\t%.2f'%(MRP_res['WT'], MRP_res['E'], MRP_res['MBS'], MRP_res['MBR'] ))
-	# print(mrp.P)
 
-	rtable = SRP.SRPFromPis(pi, eps=0.1)
+	rtable = SRP.SRPFromPis(pi, eps=0.01)
 	rtable_res, rtable_xt = runsimsforpolicy(ps, rtable, S, motion_power, tx_power, seconds)
 	print('Tab\t---\t%.2f\t%.2f\t%.2f\t%.2f'%(rtable_res['WT'], rtable_res['E'], rtable_res['MBS'], rtable_res['MBR']))
+
+	# rtable = SRP.SRPFromPis(pi, eps=0.01, use_obs = True)
+	# rtable_res, rtable_xt = runsimsforpolicy(ps, rtable, S, motion_power, tx_power, seconds)
+	# print('Tab-O\t---\t%.2f\t%.2f\t%.2f\t%.2f'%(rtable_res['WT'], rtable_res['E'], rtable_res['MBS'], rtable_res['MBR']))
 
 	# ortable = SRP.MinSSRPFromPis(pi, S, eps=0.1)
 	# if rtable != ortable:
 	# 	ortable_res, ortable_xt = runsimsforpolicy(ps, ortable, S, motion_power, tx_power, seconds)
 	# 	print('OTab\t---\t%.2f\t%.2f\t%.2f\t%.2f'%(ortable_res['WT'], ortable_res['E'], ortable_res['MBS'], ortable_res['MBR']))	
-	#print(ortable.seq)
+	# #print(ortable.seq)
 	#print(rtable.seq)
 	#Run baseline (TSPN) policy
 	S_TSPN = dtr.XtoS(TSPNP['X'],v)

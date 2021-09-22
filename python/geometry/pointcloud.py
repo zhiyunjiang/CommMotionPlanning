@@ -40,19 +40,19 @@ class PointCloud():
 		self.ymin = self.points[:,1].min()
 		self.ymax = self.points[:,1].max()
 		
-	def partition(self, alpha=0.01, algo = 0):
+	def partition(self, alpha=0.01, algo = 0, do_reduce = True):
 		if self.polygons is None:
-			self._find_polys(alpha, algo)
+			self._find_polys(alpha, algo, do_reduce)
 		
 		return self.polygons
 		
 	def plot(self):
 		plt.scatter(self.points[:,0], self.points[:,1])
 		
-	def plot_polys(self, show_partition=True):
+	def plot_polys(self, show_partition=True, ax = plt):
 		if self.polygons is not None:
 			for poly in self.polygons:
-				poly.plot(show_partition)
+				poly.plot(show_partition, ax)
 				
 	def distToPC(self, other):
 		min_dist = float('inf')
@@ -70,7 +70,7 @@ class PointCloud():
 					argmin = (p1, p2)
 		return min_dist, argmin	
 		
-	def _find_polys(self, alpha, algo):
+	def _find_polys(self, alpha, algo, do_reduce):
 		#find the polygons using alphashapes, then extract
 		CGAL_pts = to_CGAL_points(self.points)
 		shapes = CGAL_alphashape.Alpha_shape_2(CGAL_alphashape.REGULARIZED)
@@ -108,7 +108,8 @@ class PointCloud():
 		n_subregions = 0
 		for poly in self.polygons:
 			poly.make_cc()
-			poly.reduce()
+			if do_reduce:
+				poly.reduce()
 			poly.partition(algo = algo)
 			n_subregions += len(poly.cnvx_partition)
 
@@ -535,15 +536,17 @@ class Poly:
 		return pi
 
 
-	def plot(self, show_partition = True):
+	def plot(self, show_partition = True, ax = plt):
 		if show_partition and self.cnvx_partition is not None:
 			for cnvx in self.cnvx_partition:
-				cnvx.plot(show_partition)
+				cnvx.plot(show_partition, ax)
 		else:
 			plot_points = self.points
 			p0 = self.points[0]
 			plot_points = np.concatenate((plot_points, [p0]), axis=0)
-			plt.plot(plot_points[:,0], plot_points[:,1], 'k-')
+			ax.plot(plot_points[:,0], plot_points[:,1], 'k-')
+			for hole in self.holes:
+				hole.plot(show_partition, ax)
 		
 	
 	def is_cc(self):
