@@ -9,9 +9,9 @@ import sys
 from pathlib import Path
 #sys.path.insert(0, "../comm_channel")
 #sys.path.insert(0, "../polling_systems")
-#sys.path.insert(0, "../geometry")
 sys.path.insert(0, "../utils")
 
+from pbin import PBTree 
 from tree_node import TreeNode
 
 Inf = float('inf')
@@ -31,7 +31,7 @@ class RDTSolver():
         self.stopCriteria = stop_criteria
 
         #rdTree - The tree being built out
-        self.rdTree = RDTree(do_rewire, steer_rad)
+        self.rdTree = RDTree(steer_rad, do_rewire)
 
     def solve(self, pppi):
         start_time = time.time()
@@ -56,9 +56,11 @@ class RDTSolver():
                     time_for_next_recording += series_delta
                     self.rdTree.recordBSFCost(elapsed_time)
 
+                if iteration_count %5== 0:
+                    print(iteration_count)
                 if (iteration_count in [100, 1000, 2000, 5000]) or improved:
                     print('Iteration count: %d'%(iteration_count))
-                    n_nodes = len(self.rdTree.treeNodes)
+                    n_nodes = self.rdTree.treeNodes.count
                     rut = self.getRoot()
                     rut.plotTree('k')
                     bsf = self.getBSF()
@@ -69,7 +71,7 @@ class RDTSolver():
 
         
     def getRoot(self):
-        return self.rdTree.treeNodes[0] 
+        return self.rdTree.root 
             
     def getBSF(self):
         return self.rdTree.BSF
@@ -81,7 +83,7 @@ class RDTSolver():
     def minCostSoFar(self):
         return self.getBSF().costToHere
 
-#Private methods
+    #Private methods
 
     def _initializeTree(self, pppi):
         #see Karaman & Frazzoli, 2011, page 29. Here, d=2 
@@ -94,7 +96,7 @@ class RDTSolver():
             lb_ms *=(region[(i*2)+1] - region[i*2])
         gamma = (2*(1+1/d)*(lb_ms/lb_unit_ball))**(1/d) + 1#need to make it greater
 
-        self.rdTree.initialize(gamma, root_pos)
+        self.rdTree.initialize(gamma, root_pos, pppi)
 
     def startInDest(self, pppi):
         root_pos = pppi.source
@@ -146,7 +148,8 @@ class RDTree():
 
         #treeNodes = [root, n1, n2, ....], the list of nodes in the tree,
         #in order in which they are added.
-        self.treeNodes = []
+        self.treeNodes = None
+        self.root = None
 
         #see "Sampling-based Algorithms for Optimal Motion Planning",
         #s. Karaman, E. Frazzoli, 2011 
@@ -162,14 +165,15 @@ class RDTree():
         self.theta = -1
     
         #setup asspects of the tree before beginning the algorithm
-    def initialize(self, gamma, root_pos,theta=1):
+    def initialize(self, gamma, root_pos, pppi, theta=1):
         self.theta = theta
         self.gamma = gamma
 
-        root = TreeNode(root_pos)
-        root.isRoot = 1
-        root.costToHere = 0
-        self.treeNodes = [root]
+        self.root = TreeNode(root_pos)
+        self.root.isRoot = 1
+        self.root.costToHere = 0
+        self.treeNodes = PBTree(pppi.region)
+        self.treeNodes.addTNode(self.root)
 
         #create a placeholder BSF with infinite cost
         self.BSF = TreeNode([-Inf,-Inf])
@@ -185,6 +189,8 @@ class RDTree():
         if success and pppi.nodeInDest(new_node) and self.BSF.costToHere > new_node.costToHere: 
             self.BSF = new_node
             improved = True
+        if not success:
+            print('new node not added')
         return improved
         
     def tryAddNode(self, x_rand, pppi):
@@ -195,13 +201,18 @@ class RDTree():
         #check to see if we already have this node added to the tree
         #should be able to just check if zero again, but let's validate
         if  min_dist != 0:
+            print('sampled new')
             path = self.steer(x_rand, nearest, pppi);
             #check if the path is collision free, trimming if necessary
             viable_path = pppi.collisionFree(path)
             if len(viable_path) > 1: # more than one point in path
                 success = True
-                n_new = self.addNode(nearest, viable_path, pppi);
+                n_new = self.addNode(nearest, viable_path, pppi)
+            else:
+                print(path)
+                print(viable_path)
         else:
+            print('sampled duplicate')
             #handle the case where we resample an already sampled
             #point. Need to rewire. Look into literature
             self.rewire(nearest, pppi)
@@ -220,7 +231,7 @@ class RDTree():
         new_node.setParent(nearest, cost, path)
         if self.doRewire:
             self.rewire(new_node, pppi)
-        self.treeNodes.append(new_node)
+        self.treeNodes.addTNode(new_node)
 
         return new_node
 
@@ -234,7 +245,7 @@ class RDTree():
     """
     def rewire(self, new_node, pppi):
             #See Karaman & Frazzoli, 2011
-            cardV = len(self.treeNodes)
+            cardV = self.treeNodes.count
             radius = min(self.steerRad, self.gamma*np.sqrt(np.log(cardV)/cardV))
             neighbors = self.near(new_node.x, radius)
 
@@ -287,27 +298,15 @@ class RDTree():
                        neighbor.setParent(new_node, cost, path)
 
     def steer(self, x_rand, v_nearest, pppi):
+        #do a little massaging to increase sample efficiency
+        if v_nearest.x[4] < x_rand[4]:
+            x_rand[4] = v_nearest.x[4]
+        print(v_nearest.x)
+        print(x_rand)
         return steer(self.steerRad, x_rand, v_nearest.x, pppi)
         
     def near(self, pt, radius):
-        neighbors = []
-        for node in self.treeNodes:
-            dist = np.linalg.norm(node.x - pt)
-            if dist < radius and dist != 0: #ignore if it's the same point
-                neighbors.append(node)
+        return self.treeNodes.findNeighborhood(pt, radius)
 
-        return neighbors
-
-    #TODO - implement with balanced box decomposition (space O(n), 
-    # time O(log(n))) or boxed (space = grid_x_dim * grid_y_dim, time O(1))
-    #currently is O(n) (brute force)
     def nearest(self, x_rand):
-        root = self.treeNodes[0]
-        min_dist = np.linalg.norm(root.x - x_rand)
-        nearest = root
-        for node in self.treeNodes:
-            dist = np.linalg.norm(node.x - x_rand)
-            if dist < min_dist:
-                min_dist = dist
-                nearest = node
-        return nearest, min_dist
+        return self.treeNodes.findNearest(x_rand)

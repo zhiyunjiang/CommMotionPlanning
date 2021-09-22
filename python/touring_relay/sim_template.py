@@ -314,11 +314,11 @@ def run_sims(ps, AORP, TSPNP, hrs, mins, seconds, motion_power, tx_power, v=1):
 	AORP_res, AORP_xt = runsimsforpolicy(ps, aorp, S, motion_power, tx_power, seconds)
 	print('AORP\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f'%(AORP['WT'], AORP_res['WT'], AORP_res['E'], AORP_res['MBS'], AORP_res['MBR']))
 
-	# #also look at what happens if we try the Markoviian routing policy
-	# mrp = MRP.rnd2P(pi, S, alpha=0.05)
-	# MRP_res, MRP_xt = runsimsforpolicy(ps, mrp, S, motion_power, tx_power, seconds)
-	# print('MRP\t---\t%.2f\t%.2f\t%.2f\t%.2f'%(MRP_res['WT'], MRP_res['E'], MRP_res['MBS'], MRP_res['MBR'] ))
-	# print(mrp.P)
+	# #also look at what happens if we try the Markovian routing policy
+	mrp = MRP.rnd2P(pi, S, alpha=0.05)
+	MRP_res, MRP_xt = runsimsforpolicy(ps, mrp, S, motion_power, tx_power, seconds)
+	print('MRP\t---\t%.2f\t%.2f\t%.2f\t%.2f'%(MRP_res['WT'], MRP_res['E'], MRP_res['MBS'], MRP_res['MBR'] ))
+	print(mrp.P)
 
 	rtable = SRP.SRPFromPis(pi, eps=0.1)
 	rtable_res, rtable_xt = runsimsforpolicy(ps, rtable, S, motion_power, tx_power, seconds)

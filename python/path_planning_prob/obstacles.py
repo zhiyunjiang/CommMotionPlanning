@@ -189,7 +189,7 @@ class SpectralEfficiencyCap(Obstacle):
 		v2 = p2[2:4]
 		time = 2*dist/np.linalg.norm(v1+v2) #assume linear, constant acceleration
 		data = p1[4] - p2[4]#data has to be increasing
-		if data < 0:
+		if data <= 0:
 			return True
 		r_avg = data/(self.BW*time)
 		return r_avg > self.r_max

@@ -49,11 +49,11 @@ def min_cycle(regions, order, verbose = False):
 	return _solve(model, verbose)
 
 def min_PWD_over_P(pi, D, verbose = False):
+	n = len(pi)
 	model = pymo.ConcreteModel()
 
-	n = len(pi)
 	model.n = n
-	model.pi = pi
+	model.pi = pi_obs
 	model.D = D
 	model.P = pymo.Var([ i*n +j for i in range(n) for j in range(n) if i!=j], bounds=(0,1))
 
