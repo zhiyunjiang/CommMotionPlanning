@@ -50,27 +50,41 @@ def SRPInOrder(n):
 	sequence = [i for i in range(n)]
 	return CyclicRP(sequence)
 	
-def SRPFromPis(pis, eps=0.01):
-	sequence = _seuqnce_from_pi(pis, eps)
+def SRPFromPis(pis, eps=0.01, use_obs = False):
+	sequence = _sequence_from_pi(pis, eps, use_obs)
 
 	return TableRP(sequence)
 
 
 def MinSSRPFromPis(pis, S, eps=0.01):
-	sequence = _seuqnce_from_pi(pis, eps)
+	sequence = _sequence_from_pi(pis, eps, use_pi_obs = True)
 	optimizer = SeqDPOptimizer(sequence, S)
 	sequence, _ = optimizer.optimize()
 	return TableRP(sequence)
 
-def _seuqnce_from_pi(pis, eps):
+def _sequence_from_pi(pis, eps, use_pi_obs = False):
 	pis = np.array(pis)
 	length = len(pis)
+	if use_pi_obs:
+		n = length
+		P = np.zeros((n,n))
+		for i in range(n):
+		    for j in range(n):
+		        if i != j:
+		            P[i,j] = pis[j]
+		    P[i,:] /= sum(P[i,:])
+		v, M = np.linalg.eig(P.T)
+
+		pis = M[:,0]/sum(M[:,0]) 
+		
 	expected_counts = length*np.array(pis)
-	while not _expected_counts_OK(expected_counts, eps):
+	l_max = 1000
+	while not _expected_counts_OK(expected_counts, eps) and length <= l_max:
 		length += 1
 		expected_counts = length*np.array(pis)
 		
 	counts = np.rint(expected_counts)
+	length = int(np.sum(counts))
 	#now apply the Golden ratio
 	phi_inv = 0.5*(np.sqrt(5) - 1)
 	phi_mods = np.array([((i+1)*phi_inv)%1 for i in range(length)])
