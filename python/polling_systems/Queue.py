@@ -8,11 +8,11 @@ class Queue:
 		self.is_being_serviced = False
 		self.service_start_times = []
 
-	def add(self, time):
-		self.waiting.append(time)
+	def add(self, time_in):
+		self.waiting.append(time_in)
 
 	def start_service(self, time):
-		if len(self.waiting) >= 0:
+		if len(self.waiting) > 0:
 			in_time = self.waiting.pop(0)
 			self.wait_times.append(time - in_time)
 			self.service_start_times.append(in_time)			

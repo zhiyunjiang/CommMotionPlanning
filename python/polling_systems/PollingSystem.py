@@ -74,9 +74,8 @@ class PollingSystem:
 		while t <=tmax:
 			x = [len(queue.waiting) for queue in queues]
 			xt.append(np.concatenate( (np.array([t, q]), x) ))
-			if stage % 20 == 0:
-				sys_avg_wait = self._calc_sim_stats(queues)
-				wt.append([t,sys_avg_wait])
+			sys_avg_wait = self._calc_sim_stats(queues)
+			wt.append([t,sys_avg_wait])
 			#check the number of requests currently at queue q
 			reqs = x[q]
 			if reqs > 0:
@@ -87,7 +86,9 @@ class PollingSystem:
 			else:
 				#
 				q_prev = q
-				q = rp.next(q)
+				while q == q_prev:#ignore empty cycles
+					q = rp.next(q)
+					stage +=1
 				server_time = S[q_prev,q]
 				total_travel_time += server_time
 				is_traveling = True
@@ -96,16 +97,17 @@ class PollingSystem:
 			if len(arrival_times) > 0:
 				xt, arrival_times = self._register_arrivals(arrival_times, t_next, queues, q, is_traveling, xt)
 
-			# account for any processing the server might have done
+			#register arrivals that showed up during server_time
+			#xt = self._register_arrivals_2(server_time, t, queues, q, is_traveling, xt)
+
 			t = t_next
-			if is_traveling:
-				queues[q_prev].service_complete()
-				stage +=1
 
 		sys_avg_wait = self._calc_sim_stats(queues)
 		wt.append([tmax, sys_avg_wait])
-
-		return xt, wt, queues, total_travel_time
+		S_tilde = 0
+		if stage>0:
+			S_tilde = total_travel_time/stage
+		return xt, wt, queues, S_tilde
 
 
 	def plotWvsPi(self, S):
@@ -150,25 +152,17 @@ class PollingSystem:
 		sk = S @ pi
 		sk_2 = S**2 @ pi
 		rhok = np.reshape(self.Ls * self.beta, (1, self.n))
+
 		term1 = 1/self.RhoSys()
 		term2 = ( self.beta*self.RhoSys()**2 )/ ( 2*(1 - self.RhoSys()) )
 		term3 = (np.transpose(pi) @ sk)/(1-self.RhoSys()) * ( (rhok - rhok**2) @ (1/pi) )
 		term4 = rhok @ sk
 		term5 =  (self.RhoSys() * np.transpose(pi) @ sk_2) /(2* ( np.transpose(pi) @ sk) )
-
-		return np.reshape(term1 *(term2 + term3 - term4 + term5 ), 1)[0]
-
-	# def _calc_avg_wait_markov(self, P, S):
-
-	# 	v, M = np.linalg.eig(P.T)
-	# 	pi = M[:,0]/sum(M[:,0]) 
-	# 	s_avg = (S*P.T) @ pi
-	# 	s2_avg = ( (S**2)*P.T) @ pi
 		
-	# 	term1 = 1/self.RhoSys()
-	# 	term2 = (self.RhoSys()/2*s_avg)*s2_avg
-	# 	term3 = (1/s_avg)
+		return np.reshape(term1 * ( term2 + term3 - term4 + term5 ), 1)[0]
 
+	def _calc_avg_wait_markovian(self, P, S):
+		pass
 		
 	def _calc_avg_wait_cyclic(self, S):
 		"""
@@ -188,7 +182,23 @@ class PollingSystem:
 		
 	def _calc_avg_wait_table(self):
 		pass
-		
+	
+	def _register_arrivals_2(self, server_time, t_start, queues, q_current, is_traveling, xt):
+		rng = default_rng()
+		if is_traveling:
+			q_current = -1
+
+		for q in range(self.n):
+			t = 0
+			while t <= server_time:
+				#draw the next arrival from the exponential distribution
+				t += rng.exponential(scale=1/self.Ls[q])
+				if t<=server_time:
+					queues[q].add(t_start+t)
+		x = [len(queue.waiting) for queue in queues]
+		xt.append(np.concatenate( ([t_start+server_time, q_current], x) ))
+		return xt
+
 	def _register_arrivals(self, arrival_times, t_next, queues, q, is_traveling, xt):
 		t_arrival = arrival_times[0][0]
 		while t_arrival <= t_next:
