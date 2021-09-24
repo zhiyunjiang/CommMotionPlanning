@@ -52,8 +52,7 @@ def rnd2P(pi, S, alpha=0.5, verbose=False):
 	    P[i,:] /= sum(P[i,:])
 	v, M = np.linalg.eig(P.T)
 
-	pi_obs = M[:,0]/sum(M[:,0]) 
-
+	pi_obs = M[:,0]/sum(M[:,0])
 	    
 	model = picos.Problem()
 	P = picos.RealVariable('P', (n,n))
@@ -62,7 +61,6 @@ def rnd2P(pi, S, alpha=0.5, verbose=False):
 	v1 = picos.Constant('1_n', np.ones(n))
 	q = picos.Constant('q', np.sqrt(pi_obs))
 	Pi = picos.Constant('pi', pi_obs)
-
 
 	PI_sqrt = picos.Constant('PI^.5', np.diag(np.sqrt(pi_obs)))
 	PI_negsqrt = picos.Constant('PI^-.5', np.diag(1/np.sqrt(pi_obs)) )
