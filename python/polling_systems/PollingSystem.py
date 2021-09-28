@@ -67,6 +67,7 @@ class PollingSystem:
 		t = 0.0
 		xt=[]
 		wt=[]
+		polling_instants = []
 		is_traveling = False
 		queues = [Queue() for i in range(self.n)]
 		stage = 0
@@ -79,6 +80,9 @@ class PollingSystem:
 			#check the number of requests currently at queue q
 			reqs = x[q]
 			if reqs > 0:
+				if is_traveling:
+					polling_instants.append([t,q])
+					stage += 1
 				#service those
 				server_time = self.beta
 				queues[q].start_service(t)
@@ -86,9 +90,11 @@ class PollingSystem:
 			else:
 				#
 				q_prev = q
-				while q == q_prev:#ignore empty cycles
-					q = rp.next(q)
+				q = rp.next(q)
+				while q == q_prev:#ignore empty cycles#assume 0 switchover time for the same queue#
+					polling_instants.append([t,q])
 					stage +=1
+					q = rp.next(q)
 				server_time = S[q_prev,q]
 				total_travel_time += server_time
 				is_traveling = True
@@ -101,13 +107,15 @@ class PollingSystem:
 			#xt = self._register_arrivals_2(server_time, t, queues, q, is_traveling, xt)
 
 			t = t_next
+			# if is_traveling:
+			# 	stage += 1
 
 		sys_avg_wait = self._calc_sim_stats(queues)
 		wt.append([tmax, sys_avg_wait])
 		S_tilde = 0
 		if stage>0:
 			S_tilde = total_travel_time/stage
-		return xt, wt, queues, S_tilde
+		return xt, wt, queues, S_tilde, polling_instants
 
 
 	def plotWvsPi(self, S):
@@ -130,7 +138,6 @@ class PollingSystem:
 	"""
 	Private Methods
 	"""
-
 	def _calc_sim_stats(self, queues):
 		sum_of_all_wait_times = 0
 		n_serviced = 0
@@ -143,7 +150,70 @@ class PollingSystem:
 			sys_avg_wait = 0
 
 		return sys_avg_wait
+
+	#Useful system properties
+
+	def _S_avg(self, S, pi):
+		return pi.T @ S @ pi
+
+	def _t_avg(self, S, pi):
+		return self._S_avg(S, pi)/(1-self.RhoSys())
+
+	def _S_2(self, S, pi):
+		return pi.T @ (S**2) @ pi		
+
+	def _D_2(self, S, pi):
+		#the mony ball
+		return sum([pi[i]*self._var_D_i(S, pi, i) for i in range(self.n)]) + (self._t_avg(S, pi)*self.LSys())**2
+
+	def _var_D_i(self, S, pi, i):
+		tbar = self._t_avg(S, pi)
+		rho_i = self._Rho_i(i)
+
+		dbari = tbar*self.Ls[i]/pi[i]
+
+		var_i = dbari *(1+ 2*(rho_i)/(1-rho_i) )
+
+		return var_i
+
+	def _Rho_i(self, i):
+		return self.beta*self.Ls[i]
+
+	def _Li_mc_avg(self, S, pi, i):
+		return (self._t_avg(S, pi)*(1-self._Rho_i(i))*self.Ls[i])/pi[i]
+
+	def _LSys_mc_avg(self, S, pi):
+		return sum([self._Li_mc_avg(S,pi, i) for i in range(self.n)])
+
+	
+	def _calc_avg_wait_random2(self, S, pi):
+		# avg queue length from data alreay in system
+		term1 = self._LSys_mc_avg(S, pi)
+		print(term1)
 		
+		# avg queue length from data that arrives in the interval
+		tbar = self._t_avg(S, pi)
+		term2a = self._S_2(S, pi)
+		rhok = np.reshape(self.Ls * self.beta, (1, self.n))
+		term2b = (rhok@ S @ pi )*tbar
+		D2 = self._D_2(S, pi)
+		term2c = self.beta**2 * D2
+		term2 = (self.LSys()/2)*(term2a + 2*term2b + term2c )/tbar
+		print(term2)
+
+		# avg queue length due to data being serviced
+		#if it's in the queue, it's still in the process of being serviced
+		term3a =(self.beta/2)*(D2 - self.LSys()*tbar) 
+		term3b = term2b/self.beta
+		term3 =  (term3a + term3b)/tbar
+		print(term3)
+
+		L_avg = term1 + term2 - term3
+
+		#apply little's law
+		return (L_avg/self.LSys()) - self.beta
+
+
 	def _calc_avg_wait_random(self, pi, S):
 
 		"""

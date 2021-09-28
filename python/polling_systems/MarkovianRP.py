@@ -6,9 +6,15 @@ class MarkovianRP:
 		self.P = P # transition matrix
 		self.n = len(P)
 
-	def next(self,q):
+	def next(self,q, not_self=False):
 		probs = self.P[q,:]# get all columns associated with q
-		return np.random.choice(self.n, p=probs)
+		n = self.n
+		if not_self:
+			n = [i for i in range(self.n) if i != q]
+			probs = np.array(probs[n])
+			probs = probs/sum(probs)
+
+		return np.random.choice(n, p=probs)
 
 	#STATIC FUNCTIONS#
 	def _is_valid_dist(pi):
