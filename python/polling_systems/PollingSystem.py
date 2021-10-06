@@ -72,6 +72,14 @@ class PollingSystem:
 		queues = [Queue() for i in range(self.n)]
 		stage = 0
 		total_travel_time = 0
+		serviced_this_stage = 0
+		num_at_stage_start = 0
+		observed_switches = 0
+		ratios = np.zeros((self.n,2))
+
+		Tcounts = np.zeros((self.n, self.n))
+		Tsums = np.zeros((self.n, self.n))
+		Tlast_visit = np.zeros(self.n)#technically off, but shouldn't make a big deal
 		while t <=tmax:
 			x = [len(queue.waiting) for queue in queues]
 			xt.append(np.concatenate( (np.array([t, q]), x) ))
@@ -83,18 +91,34 @@ class PollingSystem:
 				if is_traveling:
 					polling_instants.append([t,q])
 					stage += 1
+					serviced_this_stage = 0
+					num_at_stage_start = reqs
 				#service those
+				serviced_this_stage += 1
 				server_time = self.beta
 				queues[q].start_service(t)
 				is_traveling = False
 			else:
-				#
+				#switching time
+				if num_at_stage_start > 0:
+					ratios[q,0] += serviced_this_stage/num_at_stage_start
+					ratios[q,1] += 1.0
+
+				Tcounts[:,q]+=1
+				Tsums[:,q]+= t - Tlast_visit
+				Tlast_visit[q] = t
+
 				q_prev = q
 				q = rp.next(q)
 				while q == q_prev:#ignore empty cycles#assume 0 switchover time for the same queue#
 					polling_instants.append([t,q])
 					stage +=1
+					Tcounts[:,q] += 1
+					Tsums[:,q] += t - Tlast_visit
+					Tlast_visit[q] = t
 					q = rp.next(q)
+
+				observed_switches += 1
 				server_time = S[q_prev,q]
 				total_travel_time += server_time
 				is_traveling = True
@@ -112,10 +136,18 @@ class PollingSystem:
 
 		sys_avg_wait = self._calc_sim_stats(queues)
 		wt.append([tmax, sys_avg_wait])
-		S_tilde = 0
+		S_bar = 0
 		if stage>0:
-			S_tilde = total_travel_time/stage
-		return xt, wt, queues, S_tilde, polling_instants
+			S_bar = total_travel_time/stage
+		S_tilde = 0
+		if observed_switches >0:
+			S_tilde = total_travel_time/observed_switches
+
+		for i in range(self.n):
+			if ratios[i,1]>0:
+				print("Emp Factor: %f"%(ratios[i,0]/ratios[i,1]))
+				print("Thr: %f"%(1/(1 - self.Ls[i]*self.beta)))
+		return xt, wt, queues, S_bar, polling_instants, S_tilde, Tsums/Tcounts
 
 
 	def plotWvsPi(self, S):
@@ -179,39 +211,53 @@ class PollingSystem:
 	def _Rho_i(self, i):
 		return self.beta*self.Ls[i]
 
+	def _Li_mc_avg_at_i(self, S, pi, i):
+		return (self._t_avg(S, pi)*(1-self._Rho_i(i))*self.Ls[i])/pi[i] # true given at i
+
+
+	def _Tij_avg(self, S, pi, i, j): #time since last visit to i given we're at j
+		sj_bar = S[j,:]@pi
+		rhos = self.beta * self.Ls
+		tbar = self._t_avg(S, pi)
+		mask = np.array([j for j in range(self.n) if j != i])
+		s_no_i = (S[:, mask] @pi[mask])/(1-pi[i])
+
+		return ((sj_bar + tbar*rhos[j]/pi[j]) + (1/pi[i])*tbar*(self.RhoSys() - rhos[i]) + 
+		( (1-pi[i])/pi[i])*sum([pi[k]*s_no_i[k] for k in range(self.n) if k!= i])
+		+ (1-pi[i])*s_no_i[i] )
+
 	def _Li_mc_avg(self, S, pi, i):
-		return (self._t_avg(S, pi)*(1-self._Rho_i(i))*self.Ls[i])/pi[i]
+		rhos = self.beta*self.Ls
+		tbar = self._t_avg(S, pi)
+		mask = np.array([j for j in range(self.n) if j != i])
+		S_no_i = (S[:, mask] @pi[mask])/(1-pi[i])#normalize
+
+		return tbar*self.Ls[i]*(1-rhos[i]) + (1-pi[i])*self.Ls[i]*(
+			S_no_i[i] + (1/pi[i])*(sum([pi[k]*S_no_i[k] for k in range(self.n) if k != i ])
+												 + (self.RhoSys() - rhos[i])*tbar)
+			)
 
 	def _LSys_mc_avg(self, S, pi):
 		return sum([self._Li_mc_avg(S,pi, i) for i in range(self.n)])
 
-	
 	def _calc_avg_wait_random2(self, S, pi):
-		# avg queue length from data alreay in system
-		term1 = self._LSys_mc_avg(S, pi)
-		print(term1)
+		#P, pi_obs  = pi2P(pi)
+
+		sk = S @ pi
+		sbar = pi.T @ sk
+		s_2 = pi.T @ S**2 @ pi
+		rhok = self.Ls * self.beta
 		
-		# avg queue length from data that arrives in the interval
-		tbar = self._t_avg(S, pi)
-		term2a = self._S_2(S, pi)
-		rhok = np.reshape(self.Ls * self.beta, (1, self.n))
-		term2b = (rhok@ S @ pi )*tbar
-		D2 = self._D_2(S, pi)
-		term2c = self.beta**2 * D2
-		term2 = (self.LSys()/2)*(term2a + 2*term2b + term2c )/tbar
-		print(term2)
+		T = np.array([ [ self._Tij_avg(S, pi, i, j) for j in range(self.n)] for i in range(self.n)])
 
-		# avg queue length due to data being serviced
-		#if it's in the queue, it's still in the process of being serviced
-		term3a =(self.beta/2)*(D2 - self.LSys()*tbar) 
-		term3b = term2b/self.beta
-		term3 =  (term3a + term3b)/tbar
-		print(term3)
+		term1 = 1/self.RhoSys()
+		term2 = ( self.beta*self.RhoSys()**2 )/ ( 2*(1 - self.RhoSys()) )
+		
+		term3 = (1/sbar)*(sum([pi[i]*sum([pi[j]*S[i,j]*sum([rhok[k]*T[k,i] for k in range(self.n) if k!=i])  for j in range(self.n) ]) for i in range(self.n)]))
 
-		L_avg = term1 + term2 - term3
-
-		#apply little's law
-		return (L_avg/self.LSys()) - self.beta
+		term4 =  (self.RhoSys() * s_2) /(2*sbar )
+		
+		return np.reshape(term1 * ( term2 + term3 + term4 ), 1)[0]
 
 
 	def _calc_avg_wait_random(self, pi, S):
@@ -307,4 +353,18 @@ class PollingSystem:
 
 		arrival_times = np.array(arrival_times, dtype=[('time_inst',float), ('queue', int)])
 		return np.sort(arrival_times, order='time_inst')
+
+def pi2P(pi):
+    n = len(pi)
+    #calculate true probability transitions
+    P = np.zeros((n,n))
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                P[i,j] = pi[j]
+        P[i,:] /= sum(P[i,:])
+    v, M = np.linalg.eig(P.T)
+
+    pi_obs = M[:,0]/sum(M[:,0])
+    return P, pi_obs
 				
