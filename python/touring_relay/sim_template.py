@@ -32,6 +32,8 @@ plt.rcParams.update({
     "font.sans-serif": ["Helvetica"],
     'font.size': fs})
     
+
+COLORS = ['xkcd:aqua', 'xkcd:coral', 'xkcd:wheat', 'xkcd:green', 'xkcd:orange', 'xkcd:azure', 'xkcd:yellow', 'xkcd:cyan']
 def create_channels(cps, region, res, GAMMA_TH, sub_regions = None):
 	
 	if sub_regions is None:
@@ -87,7 +89,7 @@ def plotDecompFig(n, tjcps, pfs, qBase, region, pt_cld):
 	X = np.linspace(region[1], region[0], nx)
 	Y = np.linspace(region[3], region[2], ny)
 	pts = tjcps[0]
-	color='xkcd:coral'
+	color=COLORS[1]
 	plt.plot(pts[:,0], pts[:,1], 's', color=color , markeredgewidth=0.0, markersize=5, alpha=0.35, zorder=-10)
 	#dummy series for label
 	plt.plot([-100],  [-100], 's', color=color, markeredgewidth=0.0, markersize=20, alpha=0.35, label='True Relay Region')
@@ -113,17 +115,25 @@ def plotDecompFig(n, tjcps, pfs, qBase, region, pt_cld):
 	plt.ylabel('y (m)')
 	plt.legend(loc='upper center', bbox_to_anchor=[0.5,-.075], ncol=2)
 	
-	
-		
-def plotCFwithOverlay(n, tjcps, pjcps, qBase, region, els = None, pi = None, ax = None):
-	if (ax is None):
-		fig = plt.figure(figsize=(15,15))
-		ax = fig.add_axes([0,0,1,1])
-	colors = ['xkcd:aqua', 'xkcd:coral', 'xkcd:wheat', 'xkcd:green', 'xkcd:orange', 'xkcd:azure', 'xkcd:yellow', 'xkcd:cyan']
+
+def plot_bs(qBase, ax):
+	#plot base stations
+	n = len(qBase)//2
+	for i in range(n):
+		ax.scatter([qBase[2*i][0]], [qBase[2*i][1]],
+		color=COLORS[i], marker='v', s=200, edgecolor='k', zorder=200)
+		ax.scatter([qBase[2*i+1][0]], [qBase[2*i+1][1]],
+		color=COLORS[i], marker='^', s=200, edgecolor='k', zorder=200)
+
+	#dummy series for legend formatting
+	ax.scatter([-100], [-100], marker='v', s=10*ms, color='w', edgecolor='k', label='Source')
+	ax.scatter([-100], [-100], marker='^', s=10*ms, color='w', edgecolor='k', label='Destination')
+
+def plot_relay_regions(n, tjcps, pjcps, els, pi, ax):
 	for i in range(n):
 		#plot the true field
 		pts = tjcps[i]
-		ax.plot(pts[:,0],  pts[:,1], '.', color=colors[i])
+		ax.plot(pts[:,0],  pts[:,1], '.', color=COLORS[i])
 
 		#plot the predicted field
 		pts = pjcps[i]
@@ -132,26 +142,32 @@ def plotCFwithOverlay(n, tjcps, pjcps, qBase, region, els = None, pi = None, ax 
 		s_label = 'Relay Region %d'%(i+1)
 		if els is not None:
 			s_label += ' ($\\lambda_%d = %.2f$, $\\tilde{\\pi}_%d = %.2f$)'%(i+1, els[i], i+1, pi[i])
-		ax.plot([-100], [-100], '.', color=colors[i], markersize=ms, label=s_label)
+		ax.plot([-100], [-100], '.', color=COLORS[i], markersize=ms, label=s_label)
 
 	#dummy series for label
 	ax.plot([-100],  [-100], '.', color='k', markersize=ms, alpha=0.25, label='Predicted Relay Regions')
 
-	#plot base stations
-	for i in range(n):
-		ax.scatter([qBase[2*i][0]], [qBase[2*i][1]],
-		color=colors[i], marker='v', s=200, edgecolor='k', zorder=200)
-		ax.scatter([qBase[2*i+1][0]], [qBase[2*i+1][1]],
-		color=colors[i], marker='^', s=200, edgecolor='k', zorder=200)
-	#dummy series for legend formatting
-	ax.scatter([-100], [-100], marker='v', s=4*ms, color='w', edgecolor='k', label='Source')
-	ax.scatter([-100], [-100], marker='^', s=4*ms, color='w', edgecolor='k', label='Destination')
-	    
-
+def set_lims(region, ax):
 	ax.set_xlim(region[1],region[0])
 	ax.set_ylim(region[2],region[3])
+
+def label_axes(ax):
 	ax.set_xlabel('x (m)')
 	ax.set_ylabel('y (m)')
+
+def plotCFwithOverlay(n, tjcps, pjcps, qBase, region, els = None, pi = None, ax = None):
+	if (ax is None):
+		fig = plt.figure(figsize=(15,15))
+		ax = fig.add_axes([0,0,1,1])
+	
+	plot_relay_regions(n, tjcps, pjcps, els, pi, ax)
+
+	plot_bs(qBase, ax)
+
+	set_lims(region, ax)
+
+	label_axes(ax)
+	
 	
 
 def calc_AORP(dt_sys, vel):
@@ -213,16 +229,9 @@ def plot_AORP_W_TSPN(dt_sys, AORP, TSPNP, tjcps, pjcps, qBase, region, els, pi):
 	handles, labels = ax1.get_legend_handles_labels()
 	fig.legend(handles, labels, fontsize=fs, loc='upper center', bbox_to_anchor=[0.5,0.025], ncol=2)
 	#fig.subplots_adjust(wspace=0.12)
-	
-def plot_AORP(dt_sys, AORP, tjcps, pjcps, qBase, region, els, pi, ax = plt):
-	plot_regional_decomposition(dt_sys, tjcps, pjcps, qBase, region, els, pi, ax)
 
-	X=AORP['X']
-	_plot_relay_points(X, ax)
-	pi = AORP['pi']
+def pi_to_P(pi):
 	n = len(pi)
-
-	
 
 	#calculate true probability transitions
 	P = np.zeros((n,n))
@@ -233,7 +242,16 @@ def plot_AORP(dt_sys, AORP, tjcps, pjcps, qBase, region, els, pi, ax = plt):
 	    P[i,:] /= sum(P[i,:])
 	v, M = np.linalg.eig(P.T)
 
-	pi_obs = M[:,0]/sum(M[:,0]) 
+	pi_tilde = M[:,0]/sum(M[:,0]) 
+	return P, pi_tilde
+
+def plot_AORP_routes(AORP, ax):
+	X=AORP['X']
+	_plot_relay_points(X, ax)
+	pi = AORP['pi']
+	n = len(pi)
+
+	P, pi_obs = pi_to_P(pi) 
 
 	lws = [pi_obs[i]*P[i,j] for i in range(n) for j in range(i+1, n)]
 
@@ -241,13 +259,20 @@ def plot_AORP(dt_sys, AORP, tjcps, pjcps, qBase, region, els, pi, ax = plt):
 	min_width=0.2
 	for i in range(n):
 		for j in range(i+1, n):
-			plt.plot(X[[i,j], 0], X[[i,j], 1], 'k', linewidth = max(2*base_width*pi_obs[i]*P[i,j], min_width) )
+			ax.plot(X[[i,j], 0], X[[i,j], 1], 'k', linewidth = max(2*base_width*pi_obs[i]*P[i,j], min_width) )
 
 	#dummy series for all edges
-	plt.plot([-100, -90], [-100, -100], 'k', label='Routes')
+	ax.plot([-100, -90], [-100, -100], 'k', label='Routes')
 
-	_format_legend()
-	plt.gca().invert_yaxis()
+	return lws, base_width
+
+def plot_AORP(dt_sys, AORP, tjcps, pjcps, qBase, region, els, pi, ax = plt):
+	plot_regional_decomposition(dt_sys, tjcps, pjcps, qBase, region, els, pi, ax)
+
+	lws, base_width = plot_AORP_routes(AORP, ax)
+
+	#_format_legend()
+	ax.invert_yaxis()
 	return lws, base_width
 
 def plot_TSPNP(dt_sys, TSPNP, tjcps, pjcps, qBase, region, base_width = 8):
@@ -395,7 +420,8 @@ def field_to_pts(field, region, res):
 	return toRawFromGrid(region, res, idcs)
 
 def _plot_relay_points(X, ax = plt):
-	ax.plot(X[:,0], X[:,1], '*', markersize=25, markerfacecolor='palegreen', markeredgecolor='k', label='Relay Positions', zorder = 101)
+	ax.plot(X[:,0], X[:,1], '*', markersize=25, markerfacecolor='palegreen', markeredgecolor='k', zorder = 101)
+	ax.plot([1000], [100], '*', markersize=35, markerfacecolor='palegreen', markeredgecolor='k', label='Relay Positions')
 	# ax.xlabel('x (m)')
 	# ax.ylabel('y (m)')
 

@@ -319,6 +319,12 @@ class PredictedChannel(object):
 	def p_th(self):
 		return self._p_th
 
+	def setRes(self, res):
+		self.res = res
+		self.gx, self.gy = np.meshgrid(np.linspace(x_min,x_max, int( np.rint( (x_max-x_min)*res) ) ), \
+		np.linspace(y_min,y_max, int( np.rint((y_max-y_min)*res) )))
+		self._setStats()
+
 	def setPth(self, p):
 		assert 0<=p<=1, 'Probability threshold must be in [0,1]'
 		self._p_th = p

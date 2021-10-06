@@ -20,6 +20,7 @@ from CoordTransforms import toGridFromRaw
 import pointcloud as PC
 import shot_solvers as SHOT
 import gurobi_solvers as GB
+import cplex_solvers as CPLX
 
 #Delay-Tolerant Relay System
 class DTR:
@@ -43,6 +44,15 @@ class DTR:
 			self.cregions[i].partition(algo=4, alpha = 0.5/self.channels[i].res)
 
 		self.ps = PS.PollingSystem(ls, beta)
+
+	def shiftRegion(self, rid, offset):
+		new_region = np.array(self.channels[rid*2].region) + np.array([offset[0], offset[0], offset[1], offset[1]])
+		self.channels[rid*2].region = new_region
+		self.channels[rid*2+1].region = new_region
+		self.Xis[rid] = _indices_to_pts(self.cfields[rid], self.channels[rid*2].region, self.channels[rid*2].res) 
+		
+		self.cregions[rid] = PC.PointCloud(self.Xis[rid]['points']) 
+		self.cregions[rid].partition(algo=4, alpha = 0.5/self.channels[rid].res)
 
 	def optimize(self, do_plot=True, x_opt_method = 0, verbose = False, v=1):
 		converged = False
@@ -75,8 +85,9 @@ class DTR:
 				base_temp = 100
 				X = self._Metropolis(X,S,pi, temp=100/(1 + it_count//25))
 			elif x_opt_method ==3:
-				X, _ = SHOT.min_PWD(self.cregions, pi, 1, verbose)
+				#X, _ = SHOT.min_PWD(self.cregions, pi, 1, verbose)
 				# X, _ = GB.min_PWD(self.cregions, pi, 1, verbose)
+				X, _ = CPLX.min_PWD(self.cregions, pi)
 			Xs.append(np.copy(X))
 			rp = MRP.RandomRP(pi)
 			S =  XtoS(X,v)
