@@ -90,7 +90,7 @@ def plotDecompFig(n, tjcps, pfs, qBase, region, pt_cld):
 	color='xkcd:coral'
 	plt.plot(pts[:,0], pts[:,1], 's', color=color , markeredgewidth=0.0, markersize=5, alpha=0.35, zorder=-10)
 	#dummy series for label
-	plt.plot([-100],  [-100], 's', color=color, markeredgewidth=0.0, markersize=20, alpha=0.35, label='True Relay Region')
+	plt.plot([-1000],  [-1000], 's', color=color, markeredgewidth=0.0, markersize=20, alpha=0.35, label='True Relay Region')
 
 	C = plt.contourf(X, Y, Z.T,[0.5, 0.6, 0.7, 0.8, 0.9, 1 ], alpha = 0.5, colors = ['xkcd:aqua', 'xkcd:wheat', 'xkcd:green', 'xkcd:yellow', 'xkcd:azure', ])
 	# C = plt.contour(X, Y, Z.T,[0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1 ])
@@ -101,7 +101,7 @@ def plotDecompFig(n, tjcps, pfs, qBase, region, pt_cld):
 	for poly in pt_cld.polygons:
 		poly.plot()
 	#dummy series for label
-	plt.plot( [-100, -90],  [-100, -90], '-', color='k', markersize=20, label='Convex Partition ($p_{{th}}=0.7$)')
+	plt.plot( [-1000, -1000],  [-1000, -900], '-', color='k', markersize=20, label='Convex Partition ($p_{{th}}=0.7$)')
 
 	#plot base stations
 	plt.scatter([qBase[0][0]], [qBase[0][1]], color=color, marker='v', s=400, edgecolor='k', label='Source')
@@ -132,10 +132,10 @@ def plotCFwithOverlay(n, tjcps, pjcps, qBase, region, els = None, pi = None, ax 
 		s_label = 'Relay Region %d'%(i+1)
 		if els is not None:
 			s_label += ' ($\\lambda_%d = %.2f$, $\\tilde{\\pi}_%d = %.2f$)'%(i+1, els[i], i+1, pi[i])
-		ax.plot([-100], [-100], '.', color=colors[i], markersize=ms, label=s_label)
+		ax.plot([-1000], [-1000], '.', color=colors[i], markersize=ms, label=s_label)
 
 	#dummy series for label
-	ax.plot([-100],  [-100], '.', color='k', markersize=ms, alpha=0.25, label='Predicted Relay Regions')
+	ax.plot([-1000],  [-1000], '.', color='k', markersize=ms, alpha=0.25, label='Predicted Relay Regions')
 
 	#plot base stations
 	for i in range(n):
@@ -144,8 +144,8 @@ def plotCFwithOverlay(n, tjcps, pjcps, qBase, region, els = None, pi = None, ax 
 		ax.scatter([qBase[2*i+1][0]], [qBase[2*i+1][1]],
 		color=colors[i], marker='^', s=200, edgecolor='k', zorder=200)
 	#dummy series for legend formatting
-	ax.scatter([-100], [-100], marker='v', s=4*ms, color='w', edgecolor='k', label='Source')
-	ax.scatter([-100], [-100], marker='^', s=4*ms, color='w', edgecolor='k', label='Destination')
+	ax.scatter([-1000], [-1000], marker='v', s=4*ms, color='w', edgecolor='k', label='Source')
+	ax.scatter([-1000], [-1000], marker='^', s=4*ms, color='w', edgecolor='k', label='Destination')
 	    
 
 	ax.set_xlim(region[1],region[0])
@@ -195,7 +195,7 @@ def plot_AORP_W_TSPN(dt_sys, AORP, TSPNP, tjcps, pjcps, qBase, region, els, pi):
 			ax2.plot(X[[i,j], 0], X[[i,j], 1], 'k', linewidth = max(2*base_width*pi_obs[i]*P[i,j], min_width) )
 
 	#dummy series for all edges
-	ax2.plot([-100, -90], [-100, -100], 'k', label='Routes', markersize = ms)
+	ax2.plot([-1000, -900], [-1000, -1000], 'k', label='Routes', markersize = ms)
 	ax2.invert_yaxis()
 	ax2.set_title('AORP')
 
