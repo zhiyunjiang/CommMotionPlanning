@@ -39,21 +39,21 @@ class PollingSystem:
 	def calc_optimal_rp(self, S):
 		#start out assuming frequencies directly proportional to arrival rates
 		x0 = self.Ls/self.LSys()
-		sys_wait = lambda x: self._calc_avg_wait_random(x, S)
+		sys_wait = lambda x: self._calc_avg_wait_random(S, x)
 		bounds = [(0.001,1) for i in range(self.n)]
 		A = np.ones(self.n)
 		constraint = scipy.optimize.LinearConstraint(A, 1, 1)
 		return minimize(sys_wait , x0, method='SLSQP', bounds = bounds, constraints = constraint, tol=1e-6)
 
 
-	def calc_avg_wait(self, rp, S):
+	def calc_avg_wait(self, S, rp):
 		"""
 		Currently only handles random routing policy
 		"""
 		#TODO - handle Table policies once I can access
 		#"Polling with a General-Service Order Table", (Baker, Rubin 1987)
 		if isinstance(rp, RandomRP):
-			return self._calc_avg_wait_random(rp.pi, S)
+			return self._calc_avg_wait_random(S, rp.pi)
 		elif isinstance(rp, CyclicRP):
 			return self._calc_avg_wait_cyclic(S)
 		else:
@@ -62,8 +62,7 @@ class PollingSystem:
 		
 	def simulate(self, rp, S, tmax, q = 0):
 
-		#generate arrival times at each queue
-		arrival_times = self._generate_arrivals(tmax)
+		#initialization
 		t = 0.0
 		xt=[]
 		wt=[]
@@ -72,10 +71,6 @@ class PollingSystem:
 		queues = [Queue() for i in range(self.n)]
 		stage = 0
 		total_travel_time = 0
-		serviced_this_stage = 0
-		num_at_stage_start = 0
-		observed_switches = 0
-		ratios = np.zeros((self.n,2))
 
 		Tcounts = np.zeros((self.n, self.n))
 		Tsums = np.zeros((self.n, self.n))
@@ -85,69 +80,45 @@ class PollingSystem:
 			xt.append(np.concatenate( (np.array([t, q]), x) ))
 			sys_avg_wait = self._calc_sim_stats(queues)
 			wt.append([t,sys_avg_wait])
+
+			if is_traveling:#we were traveling, now we're polling
+				polling_instants.append([t,q])
 			#check the number of requests currently at queue q
 			reqs = x[q]
 			if reqs > 0:
-				if is_traveling:
-					polling_instants.append([t,q])
-					stage += 1
-					serviced_this_stage = 0
-					num_at_stage_start = reqs
 				#service those
-				serviced_this_stage += 1
 				server_time = self.beta
 				queues[q].start_service(t)
 				is_traveling = False
 			else:
-				#switching time
-				if num_at_stage_start > 0:
-					ratios[q,0] += serviced_this_stage/num_at_stage_start
-					ratios[q,1] += 1.0
-
 				Tcounts[:,q]+=1
 				Tsums[:,q]+= t - Tlast_visit
 				Tlast_visit[q] = t
 
+				#decide where we're going next
 				q_prev = q
 				q = rp.next(q)
-				while q == q_prev:#ignore empty cycles#assume 0 switchover time for the same queue#
-					polling_instants.append([t,q])
-					stage +=1
-					Tcounts[:,q] += 1
-					Tsums[:,q] += t - Tlast_visit
-					Tlast_visit[q] = t
-					q = rp.next(q)
-
-				observed_switches += 1
 				server_time = S[q_prev,q]
 				total_travel_time += server_time
 				is_traveling = True
+
 			#account for anything that happens during the server time
 			t_next = t + server_time
-			if len(arrival_times) > 0:
-				xt, arrival_times = self._register_arrivals(arrival_times, t_next, queues, q, is_traveling, xt)
 
 			#register arrivals that showed up during server_time
-			#xt = self._register_arrivals_2(server_time, t, queues, q, is_traveling, xt)
+			xt = self._register_arrivals(server_time, t, queues, q, is_traveling, xt)
 
 			t = t_next
-			# if is_traveling:
-			# 	stage += 1
+			if is_traveling:
+				stage += 1
 
 		sys_avg_wait = self._calc_sim_stats(queues)
 		wt.append([tmax, sys_avg_wait])
 		S_bar = 0
 		if stage>0:
 			S_bar = total_travel_time/stage
-		S_tilde = 0
-		if observed_switches >0:
-			S_tilde = total_travel_time/observed_switches
 
-		for i in range(self.n):
-			if ratios[i,1]>0:
-				print("Emp Factor: %f"%(ratios[i,0]/ratios[i,1]))
-				print("Thr: %f"%(1/(1 - self.Ls[i]*self.beta)))
-		return xt, wt, queues, S_bar, polling_instants, S_tilde, Tsums/Tcounts
+		return xt, wt, queues, S_bar, polling_instants, Tsums/Tcounts
 
 
 	def plotWvsPi(self, S):
@@ -240,30 +211,44 @@ class PollingSystem:
 	def _LSys_mc_avg(self, S, pi):
 		return sum([self._Li_mc_avg(S,pi, i) for i in range(self.n)])
 
-	def _calc_avg_wait_random2(self, S, pi):
-		#P, pi_obs  = pi2P(pi)
-
-		sk = S @ pi
-		sbar = pi.T @ sk
-		s_2 = pi.T @ S**2 @ pi
-		rhok = self.Ls * self.beta
+	def _calc_avg_wait_random(self, S, pi):
 		
+		P = np.tile(np.reshape(pi,self.n ), (self.n, 1))
 		T = np.array([ [ self._Tij_avg(S, pi, i, j) for j in range(self.n)] for i in range(self.n)])
+
+		return self._calc_avg_wait_markovian(P, S, T)
+
+	def _calc_avg_wait_markovian(self, P, S, T):
+		"""
+		Based on "Waiting Times in Polling Systems with Markovian Server Routing" (Boxma & Westerate, 1989)
+		See also "Efficient Visit Orders for Polling Systems" (Boxma, Levy, & Westerate, 1993)
+		"""
+		v, M = np.linalg.eig(P.T)
+		pi = M[:,0]/sum(M[:,0])
+
+		sk = np.diag(P@S)
+		sbar = pi.T @ sk
+		s_2 = pi.T @ np.diag( P@(S**2))
+		rhok = self.Ls * self.beta
 
 		term1 = 1/self.RhoSys()
 		term2 = ( self.beta*self.RhoSys()**2 )/ ( 2*(1 - self.RhoSys()) )
 		
-		term3 = (1/sbar)*(sum([pi[i]*sum([pi[j]*S[i,j]*sum([rhok[k]*T[k,i] for k in range(self.n) if k!=i])  for j in range(self.n) ]) for i in range(self.n)]))
+		term3 = (1/sbar)*(sum([pi[i]*sum([P[i,j]*S[i,j]*sum([rhok[k]*T[k,i] for k in range(self.n) if k!=i])  for j in range(self.n) ]) for i in range(self.n)]))
 
 		term4 =  (self.RhoSys() * s_2) /(2*sbar )
 		
 		return np.reshape(term1 * ( term2 + term3 + term4 ), 1)[0]
-
-
-	def _calc_avg_wait_random(self, pi, S):
+		
+	def _calc_avg_wait_random_uni_si(self, S, pi):
 
 		"""
-		Based on "Efficient Visit Orders for Polling Systems" (Boxma, Levy, & Westerate, 1993)
+		Holds when s_ij = s_ik for all j, k (more generally, when first and second moment of s_ij's are 
+		equal for any fixed i)
+
+		Based on "Waiting Times in Polling Systems with Markovian Server Routing" (Boxma & Westerate, 1989)
+		See also "Efficient Visit Orders for Polling Systems" (Boxma, Levy, & Westerate, 1993)
+				 "The Analysis of Random Polling Systems" (Kleinrock & Levy, 1988)
 		"""
 		sk = S @ pi
 		sk_2 = S**2 @ pi
@@ -277,9 +262,7 @@ class PollingSystem:
 		
 		return np.reshape(term1 * ( term2 + term3 - term4 + term5 ), 1)[0]
 
-	def _calc_avg_wait_markovian(self, P, S):
-		pass
-		
+	
 	def _calc_avg_wait_cyclic(self, S):
 		"""
 		Based on "Workloads and Waiting Times in Single-Server Systems with Multiple Customer Classes" (Boxma, 1989)
@@ -299,7 +282,7 @@ class PollingSystem:
 	def _calc_avg_wait_table(self):
 		pass
 	
-	def _register_arrivals_2(self, server_time, t_start, queues, q_current, is_traveling, xt):
+	def _register_arrivals(self, server_time, t_start, queues, q_current, is_traveling, xt):
 		rng = default_rng()
 		if is_traveling:
 			q_current = -1
@@ -314,57 +297,3 @@ class PollingSystem:
 		x = [len(queue.waiting) for queue in queues]
 		xt.append(np.concatenate( ([t_start+server_time, q_current], x) ))
 		return xt
-
-	def _register_arrivals(self, arrival_times, t_next, queues, q, is_traveling, xt):
-		t_arrival = arrival_times[0][0]
-		while t_arrival <= t_next:
-			arrival = arrival_times[0]
-
-			#add to the correct queue
-			queues[arrival[1]].add(arrival[0])
-
-			q_at_arv = q
-			if is_traveling:
-				q_at_arv = -1
-
-			x = [len(queue.waiting) for queue in queues]
-			xt.append(np.concatenate( ([arrival[0], q_at_arv], x) ))
-			
-			if len(arrival_times)>=2:
-				arrival_times = arrival_times[1:]
-				t_arrival = arrival_times[0][0]
-			else:
-				#we just serviced the only arrival
-				arrival_times = []
-				break
-		return xt, arrival_times
-
-	def _generate_arrivals(self, tmax):
-
-		arrival_times = []
-		rng = default_rng()
-		for q in range(self.n):
-			t = 0
-			while t <= tmax:
-				#draw the next arrival from the exponential distribution
-				t += rng.exponential(scale=1/self.Ls[q])
-				if t<=tmax:
-					arrival_times.append((t,q))
-
-		arrival_times = np.array(arrival_times, dtype=[('time_inst',float), ('queue', int)])
-		return np.sort(arrival_times, order='time_inst')
-
-def pi2P(pi):
-    n = len(pi)
-    #calculate true probability transitions
-    P = np.zeros((n,n))
-    for i in range(n):
-        for j in range(n):
-            if i != j:
-                P[i,j] = pi[j]
-        P[i,:] /= sum(P[i,:])
-    v, M = np.linalg.eig(P.T)
-
-    pi_obs = M[:,0]/sum(M[:,0])
-    return P, pi_obs
-				
