@@ -64,8 +64,15 @@ def toRawFromGrid(region, res, grid_pt):
     return raw_pt
 
 
+def changes_res(pts, region, res):
+    grid = toGridFromRaw(region, res, pts)
+    new_raw = toRawFromGrid(region, res, grid)
+    return np.unique(new_raw, axis = 0)
+
+
 def _check_region(region, raw_pt):
     if any( raw_pt[:,0] > region[0] ) or any( raw_pt[:,0] < region[1] )\
     or any( raw_pt[:,1] > region[2] ) or any( raw_pt[:,1] < region[3] ):
         warnings.warn('Some points are outside of the region')
+
 

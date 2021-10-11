@@ -54,28 +54,28 @@ class DTR:
 		self.cregions[rid] = PC.PointCloud(self.Xis[rid]['points']) 
 		self.cregions[rid].partition(algo=4, alpha = 0.5/self.channels[rid].res)
 
-	def optimize(self, do_plot=True, x_opt_method = 0, verbose = False, v=1):
+	def optimize(self, do_plot=True, x_opt_method = 0, verbose = False, v=1, X0 = None):
 		converged = False
 		#initialize policy and polling locations
 		pi = MRP.build_ed_policy(self.ps.Ls, self.ps.beta).pi
-		#randomly sample points from Xis
-		X = self._pick_random_X()
+		if X0 is None:
+			#randomly sample points from Xis
+			X = self._pick_random_X()
+		else:
+			X = X0
 		argmin = (X, pi)
 		min_W = float('inf')
 		Xs = [X]
 		S = XtoS(np.copy(X), v)
 		it_count = 0
-		it_wo_improvement = 0
+		it_wo_improvement = 5
 		max_it = 50
 		max_it_wo_improvement = 10
 		Wprev = np.inf
 
 		while (not converged) and (it_count < max_it) and (it_wo_improvement < max_it_wo_improvement):
 			#first, find optiaml pi
-			res = self.ps.calc_optimal_rp(S)
-			pi = res.x
-			W = res.fun
-
+			pi, W = self.ps.calc_optimal_rp(S)
 			#Now update the coordinates
 			if x_opt_method == 0:
 				X = self._simple_gradient(X, S, pi, _lr(it_count))
@@ -91,18 +91,18 @@ class DTR:
 			Xs.append(np.copy(X))
 			rp = MRP.RandomRP(pi)
 			S =  XtoS(X,v)
-			W = self.ps.calc_avg_wait(rp, S)
+			W = self.ps.calc_avg_wait(S, rp)
 			if verbose:
 				print('Transition probabilities: ', pi)
 				print('Points: ', X)
-			print("Optimized Waiting Time: %.4f"%(W))
+				print("Optimized Waiting Time: %.4f"%(W))
 			it_count += 1
 			it_wo_improvement += 1
 			if  W < min_W:
 				min_W = W
 				argmin= (X, pi)
 				it_wo_improvement = 0
-			eps = 0.01
+			eps = 0.001
 			if abs(W - Wprev) <= eps:
 				converged = True
 			Wprev = W
@@ -111,14 +111,6 @@ class DTR:
 		if verbose:
 			print("Optimized Waiting Time: %.4f"%(Wprev))
 		return min_W, argmin[1], argmin[0]
-		
-	def naive_policy(self):
-		weights = np.ones(self.n)
-		X,_ = self._find_min_PWD(weights)
-		pi = self.ps.Ls/np.sum(self.ps.Ls)
-		rp = MRP.RandomRP(pi)
-		W = self.ps.calc_avg_wait(rp, XtoS(X))
-		return W, pi, X
 
 	def plot_optimization(self, x, save = False, ls=12):
 		fig = plt.figure(figsize=(12,12))
@@ -155,12 +147,12 @@ class DTR:
 	def _Metropolis(self, X, S, pi, max_it = 100, temp=100):
 		rp = MRP.RandomRP(pi)
 		Xnext = np.copy(X)
-		shape = self.cfields[0].shape
-		neighborhood = [[1,1],[1,0],[1,-1],[0,1],[0,0],[0,-1],[-1,1],[-1,0],[-1,-1]]
+		neighborhood = np.array([[1,1],[1,0],[1,-1],[0,1],[0,0],[0,-1],[-1,1],[-1,0],[-1,-1]])
 		for it in range(max_it):
 			for i in range(self.n):
-				idx = toGridFromRaw(self.channels[i].region, self.channels[i].res, Xnext[i]).reshape(2)
+				idx = toGridFromRaw(self.channels[i*2].region, self.channels[i*2].res, Xnext[i]).reshape(2)
 				scores = np.Inf*np.ones(9)
+				shape = self.cfields[i].shape
 				for j in range(9):
 					neighbor = idx + neighborhood[j]
 					#index in region and is connected
@@ -169,7 +161,7 @@ class DTR:
 						xitemp = toRawFromGrid(self.channels[i].region, self.channels[i].res, neighbor)
 						Xtemp[i] = xitemp
 						S =  XtoS(Xtemp)
-						scores[j] = self.ps.calc_avg_wait(rp, S)
+						scores[j] = self.ps.calc_avg_wait(S, rp)
 				#move to neighbors with some probability
 				#normalize
 				t = temp/(1 + (it)//2)
@@ -178,7 +170,6 @@ class DTR:
 				neighbor_idx = np.random.choice(9,p=scores)
 				neighbor = idx + neighborhood[neighbor_idx]
 				Xnext[i] = toRawFromGrid(self.channels[i].region, self.channels[i].res, neighbor)
-		#print(Xnext)
 		return Xnext
 
 	def _PSO(self, X, S, pi):
@@ -203,8 +194,8 @@ class DTR:
 		s_2 = np.transpose(pi) @ S**2 @ pi
 		rhok = np.reshape(self.ps.Ls * self.ps.beta, (1, self.n))
 
-		term1 = ( 2*(rhok - rhok**2) @ (1/pi)*(1-self.ps._Rho()) 
-		 			+ self.ps._Rho()*(2*S[i,j]*s - s_2 )/s**2 )
+		term1 = ( 2*(rhok - rhok**2) @ (1/pi)*(1-self.ps.RhoSys()) 
+		 			+ self.ps.RhoSys()*(2*S[i,j]*s - s_2 )/s**2 )
 		return term1*pi[i]*pi[j] - (pi[i]*rhok[0][j] + pi[j]*rhok[0][i])
 
 def _lr(i):

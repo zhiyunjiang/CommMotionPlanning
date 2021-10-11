@@ -22,7 +22,6 @@ class PollingSystem:
 		if self.RhoSys() >= 1:
 			warnings.warn("System with traffic %f will be unstable."%(self.RhoSys()))
 			
-	
 	def LSys(self):
 		"""
 		Arrival rate for entire system
@@ -37,13 +36,24 @@ class PollingSystem:
 
 
 	def calc_optimal_rp(self, S):
-		#start out assuming frequencies directly proportional to arrival rates
-		x0 = self.Ls/self.LSys()
+		#start out assuming equal distances
+		x0 = self._opt_pi_equal_distances()
 		sys_wait = lambda x: self._calc_avg_wait_random(S, x)
-		bounds = [(0.001,1) for i in range(self.n)]
+		n = len(x0)
+		lb = 0.0005
+		bounds = [(lb, 1-(n-1)*lb) for i in range(self.n)]
 		A = np.ones(self.n)
-		constraint = scipy.optimize.LinearConstraint(A, 1, 1)
-		return minimize(sys_wait , x0, method='SLSQP', bounds = bounds, constraints = constraint, tol=1e-6)
+		sum_to_one = scipy.optimize.LinearConstraint(A, 1, 1)
+		res = minimize(sys_wait , x0, method='SLSQP', bounds = bounds, constraints = sum_to_one, tol=1e-6)
+		argmin = res.x
+		min_val = res.fun
+		return argmin, min_val
+
+	def _opt_pi_equal_distances(self):
+		#assumes all exhaustive services
+		rhos = self.Ls*self.beta
+		pi = np.sqrt(rhos*(1-rhos))
+		return pi/sum(pi)#normalize
 
 
 	def calc_avg_wait(self, S, rp):
@@ -191,7 +201,8 @@ class PollingSystem:
 		rhos = self.beta * self.Ls
 		tbar = self._t_avg(S, pi)
 		mask = np.array([j for j in range(self.n) if j != i])
-		s_no_i = (S[:, mask] @pi[mask])/(1-pi[i])
+		s_no_i = (S[:, mask] @pi[mask])/(1.0-pi[i])
+
 
 		return ((sj_bar + tbar*rhos[j]/pi[j]) + (1/pi[i])*tbar*(self.RhoSys() - rhos[i]) + 
 		( (1-pi[i])/pi[i])*sum([pi[k]*s_no_i[k] for k in range(self.n) if k!= i])
@@ -201,7 +212,8 @@ class PollingSystem:
 		rhos = self.beta*self.Ls
 		tbar = self._t_avg(S, pi)
 		mask = np.array([j for j in range(self.n) if j != i])
-		S_no_i = (S[:, mask] @pi[mask])/(1-pi[i])#normalize
+
+		S_no_i = (S[:, mask] @pi[mask])/(1.0-pi[i])#normalize
 
 		return tbar*self.Ls[i]*(1-rhos[i]) + (1-pi[i])*self.Ls[i]*(
 			S_no_i[i] + (1/pi[i])*(sum([pi[k]*S_no_i[k] for k in range(self.n) if k != i ])
@@ -212,20 +224,19 @@ class PollingSystem:
 		return sum([self._Li_mc_avg(S,pi, i) for i in range(self.n)])
 
 	def _calc_avg_wait_random(self, S, pi):
-		
 		P = np.tile(np.reshape(pi,self.n ), (self.n, 1))
 		T = np.array([ [ self._Tij_avg(S, pi, i, j) for j in range(self.n)] for i in range(self.n)])
 
-		return self._calc_avg_wait_markovian(P, S, T)
+		return self._calc_avg_wait_markovian(P, S, T, pi)
 
-	def _calc_avg_wait_markovian(self, P, S, T):
+	def _calc_avg_wait_markovian(self, P, S, T, pi = None):
 		"""
 		Based on "Waiting Times in Polling Systems with Markovian Server Routing" (Boxma & Westerate, 1989)
 		See also "Efficient Visit Orders for Polling Systems" (Boxma, Levy, & Westerate, 1993)
 		"""
-		v, M = np.linalg.eig(P.T)
-		pi = M[:,0]/sum(M[:,0])
-
+		if pi is None:
+			v, M = np.linalg.eig(P.T)
+			pi = M[:,0]/sum(M[:,0])
 		sk = np.diag(P@S)
 		sbar = pi.T @ sk
 		s_2 = pi.T @ np.diag( P@(S**2))

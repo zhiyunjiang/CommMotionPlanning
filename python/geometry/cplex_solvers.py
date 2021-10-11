@@ -18,20 +18,65 @@ def min_PWD(regions, pi):
 
 	mdl.minimize(mdl.sum([k[i]*s[i] for i in range(len(s))]))
 
-	#set up variables needed for objective
-	xs = mdl.continuous_var_list(n_regions, lb=[reg.xmin for reg in regions], ub=[reg.xmax for reg in regions])
-	ys = mdl.continuous_var_list(n_regions, lb=[reg.ymin for reg in regions], ub=[reg.ymax for reg in regions])
+	xs, ys = _add_xs_and_ys(n_regions, regions, mdl)
 
 	#add constraints to couple new dummy vars to relay postitions
 	qcs=[]
 	for i in range(n_regions):
 		for j in range(i+1, n_regions):
 			qcs.append( QuadraticConstraint(mdl, mdl.sum_squares( [(xs[i]-xs[j]), (ys[i]-ys[j])] ),
-											ComparisonType.LE, mdl.sum_squares([s[len(qcs)]]) ))
-	#Not sure this is necessary        
+											ComparisonType.LE, mdl.sum_squares([s[len(qcs)]]) ))      
 	mdl.add_quadratic_constraints(qcs)
 
+	_add_regional_constraints(n_regions, regions, mdl, xs, ys)
 
+	return _solve(mdl, xs, ys, n_regions)
+
+def min_cycle(regions, order, verbose = False):
+	mdl = Model(name='min_PWD_cplx')
+	n_regions = len(regions)
+
+	s = mdl.continuous_var_list(n_regions)
+
+	mdl.minimize(mdl.sum([s[i] for i in range(len(s))]))
+
+	xs, ys = _add_xs_and_ys(n_regions, regions, mdl)
+
+	#add constraints to couple new dummy vars to relay postitions
+	qcs = []
+	for i in range(n_regions):
+		j = (i+1)%n_regions
+		qcs.append( QuadraticConstraint(mdl, mdl.sum_squares( [(xs[order[i]]-xs[order[j]]), (ys[order[i]]-ys[order[j]])] ),
+										ComparisonType.LE, mdl.sum_squares([s[i]]) ))       
+	mdl.add_quadratic_constraints(qcs)
+
+	_add_regional_constraints(n_regions, regions, mdl, xs, ys)
+
+	return _solve(mdl, xs, ys, n_regions)
+
+
+def _solve(mdl, xs, ys, n_regions):
+	sol = mdl.solve()
+	argmin = None
+	min_val = float('inf')
+	if sol is not None:
+		#extract x and y values
+		argmin = []
+		for i in range(n_regions):
+			argmin.append([xs[i].solution_value, ys[i].solution_value])
+		argmin = np.array(argmin)
+		#extract min val
+		min_val = sol.get_objective_value()
+	return argmin, min_val
+
+def _add_xs_and_ys(n_regions, regions, mdl):
+	#set up variables needed for objective
+	xs = mdl.continuous_var_list(n_regions, lb=[reg.xmin for reg in regions], ub=[reg.xmax for reg in regions])
+	ys = mdl.continuous_var_list(n_regions, lb=[reg.ymin for reg in regions], ub=[reg.ymax for reg in regions])
+	return xs, ys
+
+
+def _add_regional_constraints(n_regions, regions, mdl, xs, ys):
 	C = 10000 #actually need to find a value of this constant, for now just make really big, adjust if needed
 	#Constrain relay points to lie within their regions
 	for i in range(n_regions):
@@ -59,18 +104,3 @@ def min_PWD(regions, pi):
 	
 		#we must be in exactly one of the subregions
 		mdl.add_constraint(mdl.eq_constraint(mdl.sum(eta_i), 1))
-
-
-	sol = mdl.solve()
-	argmin = None
-	min_val = float('inf')
-	if sol is not None:
-		#extract x and y values
-		argmin = []
-		for i in range(n_regions):
-			argmin.append([xs[i].solution_value, ys[i].solution_value])
-		argmin = np.array(argmin)
-		#extract min val
-		min_val = sol.get_objective_value()
-
-	return argmin, min_val

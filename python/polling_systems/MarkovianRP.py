@@ -25,7 +25,6 @@ class RandomRP(MarkovianRP):
 	def __init__(self, pi):
 		#make sure it's in the right shape and that it's a numpy array
 		self.pi = np.reshape( pi, (len(pi), 1) )
-
 		#verify legitimate probaility distribution
 		#assert MarkovianRP._is_valid_dist(self.pi), "Invalid probability distribution: " + str(self.pi)
 

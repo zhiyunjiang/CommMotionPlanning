@@ -10,6 +10,7 @@ top_dir = path.parent.parent
 sys.path.insert(0, str(top_dir.absolute())+"\\geometry")
 import shot_solvers as SHOT
 import gurobi_solvers as GB
+import cplex_solvers as CPLX
 
 def _unique_cycles(n, hint):
 	permutes = permutations(range(n))
@@ -58,7 +59,8 @@ def TSPN_BF(regions, hint=None):
 		if lb(min_dists, P) < bsf:
 			# x, val = SHOT.min_cycle(regions, P)
 			#will use the Gurboi solver, which seems to be more accurate
-			x, val = GB.min_cycle(regions, P)
+			# x, val = GB.min_cycle(regions, P)
+			x, val = CPLX.min_cycle(regions, P)
 			#check if this is the best we've seen
 			if val <= bsf:
 				print('Optimal Solution Improved to %.2f'%(val))
