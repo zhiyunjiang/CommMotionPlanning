@@ -273,6 +273,9 @@ class PollingSystem:
 		
 		return np.reshape(term1 * ( term2 + term3 - term4 + term5 ), 1)[0]
 
+	def _cycle_times(self, S, pi):
+		return self._t_avg(S, pi)*(1/pi)
+
 	
 	def _calc_avg_wait_cyclic(self, S):
 		"""
