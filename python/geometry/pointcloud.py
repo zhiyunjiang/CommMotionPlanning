@@ -118,6 +118,7 @@ class PointCloud():
 		self.mk = n_subregions
 		
 	def _build_polys(incompletes):
+		min_area = 0.00001
 		completes = []
 		ni = len(incompletes)
 		terminated = (ni==0)
@@ -133,7 +134,13 @@ class PointCloud():
 						
 							#If we've completed this one, stop working on it
 							if incompletes[i].complete:
-								completes.append(Poly(incompletes[i].points))
+								
+								new_poly = Poly(incompletes[i].points)
+								#but if area is super tiny, discard
+								#since it's a wast time, adds non-trivial complexity to finding 
+								#inetrior point
+								if new_poly.area() > min_area: 
+									completes.append(new_poly)
 								break
 			
 					if not incompletes[i].complete:
@@ -529,7 +536,7 @@ class Poly:
 				if self.contains_point(pi):
 					break;
 			if not self.contains_point(pi):
-				print('WARNING: get_interior_point did not get an interior point.\nPoint: %s\n%s'%(str(pi), str(self)))
+				print('WARNING: get_interior_point did not get an interior point.\nPoint: %s\nArea: %.4f\n%s'%(str(pi), self.area(), str(self) ))
 				plt.plot(pi[0], pi[1])
 				self.plot(show_partition = False)
 				plt.show()
@@ -602,8 +609,6 @@ class Poly:
 
 		def intersects_segment(self, p1, p2):
 			return segments_intersect(p1, p2, self.points[0], self.points[1])
-				
-
 
 #Exposing several geometry related functions which may be useful in general
 #May make more sense to move these to a separate file

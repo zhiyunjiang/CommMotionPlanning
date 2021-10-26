@@ -43,11 +43,15 @@ def create_channels(cps, region, res, GAMMA_TH, sub_regions = None):
 	for cc in ccs:
 		cc.generateSH();cc.generateMP(2)#using GP model for channel sim
 		
-	cfs = [cc.getConnectionField(GAMMA_TH) for cc in ccs]
-	true_joint_con_fields = [1*(cfs[i*2]*cfs[(i*2)+1]) for i in range(len(ccs)//2)]
-	true_joint_con_pts = [field_to_pts(true_joint_con_fields[i], sub_regions[i], res) for i in range(len(ccs)//2)]
+	cfs, true_joint_con_fields, true_joint_con_pts = find_true_conn(ccs, GAMMA_TH)
 	
 	return ccs, cfs, true_joint_con_fields, true_joint_con_pts
+
+def find_true_conn(ccs, GAMMA_TH):
+	cfs = [cc.getConnectionField(GAMMA_TH) for cc in ccs]
+	true_joint_con_fields = [1*(cfs[i*2]*cfs[(i*2)+1]) for i in range(len(ccs)//2)]
+	true_joint_con_pts = [field_to_pts(true_joint_con_fields[i], ccs[2*i].region, ccs[2*i].res) for i in range(len(ccs)//2)]
+	return cfs, true_joint_con_fields, true_joint_con_pts
 	
 def predict_channels(res, ccs, true_joint_con_fields, GAMMA_TH, p_th=0.7, jcm = 0):
 	sres = res#//2
@@ -64,14 +68,7 @@ def predict_channels(res, ccs, true_joint_con_fields, GAMMA_TH, p_th=0.7, jcm = 
 		print('Completed PredictedChannel %d'%(len(pcs)))
 		
 	#Generate probability of connectivity fields
-	pfs = [pc.getPConField(GAMMA_TH) for pc in pcs]
-	
-	if jcm == 0:
-		pred_joint_con_fields = [1*(pfs[i*2]*pfs[(i*2)+1]>p_th) for i in range(len(ccs)//2)]
-	elif jcm == 1:
-		pred_joint_con_fields = [1*((pfs[i*2]>p_th)*(pfs[(i*2)+1]>p_th)) for i in range(len(ccs)//2)]
-	pred_joint_con_pts = [ field_to_pts(pred_joint_con_fields[i], ccs[i*2].region, sres) for i in range(len(ccs)//2)]
-	
+	pfs, pred_joint_con_pts = find_pred_conn(pcs, GAMMA_TH, p_th, jcm=0)
 	#calculate the probabilty of the point being in the predicted regions
 	p_pred_connected = []
 	for i in range(len(ccs)//2):
@@ -80,6 +77,18 @@ def predict_channels(res, ccs, true_joint_con_fields, GAMMA_TH, p_th=0.7, jcm = 
 		p_pred_connected.append(prob_pred_in_true(true_joint_con_fields[i], idxs))
 		
 	return pcs, pfs, pred_joint_con_pts, p_pred_connected
+
+def find_pred_conn(pcs, GAMMA_TH, p_th, jcm=0):
+	pfs = [pc.getPConField(GAMMA_TH) for pc in pcs]
+	
+	if jcm == 0:
+		pred_joint_con_fields = [1*(pfs[i*2]*pfs[(i*2)+1]>p_th) for i in range(len(pcs)//2)]
+	elif jcm == 1:
+		pred_joint_con_fields = [1*((pfs[i*2]>p_th)*(pfs[(i*2)+1]>p_th)) for i in range(len(pcs)//2)]
+	pred_joint_con_pts = [ field_to_pts(pred_joint_con_fields[i], pcs[i*2].region, pcs[i*2].res) for i in range(len(pcs)//2)]
+
+	return pfs, pred_joint_con_pts
+	
 	
 def plotDecompFig(n, tjcps, pfs, qBase, region, pt_cld):
 	fig = plt.figure(figsize=(22,18))
@@ -365,18 +374,17 @@ def run_sims(ps, AORP, TSPNP, hrs, mins, seconds, motion_power, tx_power, v=1):
 	
 	return AORP_res, AORP_xt, rtable_res, rtable_xt, tspn_res, tspn_xt
 	
-def plotLast10Min(xt):
+def plotLastMins(xt, mins=10):
 	xt = np.array(xt)
 	n = xt.shape[1]
 	fig = plt.figure(figsize=[20,10])
 	for i in range(2,n):
-		plt.plot(xt[:,0]/60, xt[:,i], label = 'Queue %d'%(i-1))
+		plt.plot(xt[:,0]/60, xt[:,i], label = '$Q_%d$'%(i-1))
 
-	plt.xlim((xt[-1,0]/60)-10,xt[-1,0]/60)
-	plt.ylim(0,400)
-	plt.legend()
+	plt.xlim((xt[-1,0]/60)-mins,xt[-1,0]/60)
+	plt.legend(ncol=n)
 	plt.xlabel('Minutes of Operation')
-	plt.ylabel('Queue Length (MB)')
+	plt.ylabel('Buffer Length (MB)')
 	
 
 def save_plt(name):
@@ -395,7 +403,7 @@ def runsimsforpolicy(ps, rp, S, motion_power, tx_power, seconds, n_trials = 20):
 	TMBR = 0 #total mb remaining
 	TE = 0
 	for i in range(n_trials):
-		xt, wt, queues, total_travel_time = ps.simulate(rp, S, seconds)
+		xt, wt, queues, total_travel_time, _, _, _ = ps.simulate(rp, S, seconds)
 		FAWT += wt[-1][1]
 		MB_serviced = sum([len(q.wait_times) for q in queues])
 		TMBS += MB_serviced

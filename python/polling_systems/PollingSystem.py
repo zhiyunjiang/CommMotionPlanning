@@ -128,7 +128,13 @@ class PollingSystem:
 		if stage>0:
 			S_bar = total_travel_time/stage
 
-		return xt, wt, queues, S_bar, polling_instants, Tsums/Tcounts
+		return xt, wt, queues, total_travel_time, S_bar, polling_instants, Tsums/Tcounts
+
+
+	def waitMG1(self):
+		term1 = 1/self.RhoSys()
+		term2 = ( self.beta*self.RhoSys()**2 )/ ( 2*(1 - self.RhoSys()) )
+		return term1 * term2
 
 
 	def plotWvsPi(self, S):
@@ -207,6 +213,12 @@ class PollingSystem:
 		return ((sj_bar + tbar*rhos[j]/pi[j]) + (1/pi[i])*tbar*(self.RhoSys() - rhos[i]) + 
 		( (1-pi[i])/pi[i])*sum([pi[k]*s_no_i[k] for k in range(self.n) if k!= i])
 		+ (1-pi[i])*s_no_i[i] )
+
+	def _Tij_avg_alt(self, S, pi, i, j):
+		sj_bar = S[j,:]@pi
+		rhos = self.beta * self.Ls
+		tbar = self._t_avg(S, pi)
+		return (sj_bar + tbar*rhos[j]/pi[j]) + (1-pi[i])*tbar/pi[i]
 
 	def _Li_mc_avg(self, S, pi, i):
 		rhos = self.beta*self.Ls
