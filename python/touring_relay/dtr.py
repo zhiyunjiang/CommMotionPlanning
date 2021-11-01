@@ -54,16 +54,20 @@ class DTR:
 		self.cregions[rid] = PC.PointCloud(self.Xis[rid]['points']) 
 		self.cregions[rid].partition(algo=4, alpha = 0.5/self.channels[rid].res)
 
-	def optimize(self, do_plot=True, x_opt_method = 0, verbose = False, v=1, X0 = None):
+	#TODO - generalize to handle general Markovian policy
+	def optimize(self, do_plot=True, x_opt_method = 3, policy_type = 0, verbose = False, v=1, X0 = None):
 		converged = False
 		#initialize policy and polling locations
-		pi = MRP.build_ed_policy(self.ps.Ls, self.ps.beta).pi
+		P = MRP.build_ed_policy(self.ps.Ls, self.ps.beta).pi
+		if policy_type == 1:
+			#just initialize to unifrom, doesn't really matter
+			P = np.ones( (self.n, self.n))/self.n
 		if X0 is None:
 			#randomly sample points from Xis
 			X = self._pick_random_X()
 		else:
 			X = X0
-		argmin = (X, pi)
+		argmin = (X, P)
 		min_W = float('inf')
 		Xs = [X]
 		S = XtoS(np.copy(X), v)
@@ -74,33 +78,35 @@ class DTR:
 		Wprev = np.inf
 
 		while (not converged) and (it_count < max_it) and (it_wo_improvement < max_it_wo_improvement):
-			#first, find optiaml pi
-			pi, W = self.ps.calc_optimal_rp(S)
+			#first, find optiaml probability transitions
+			P, W = self.ps.calc_optimal_rp(S, policy_type)
 			#Now update the coordinates
 			if x_opt_method == 0:
-				X = self._simple_gradient(X, S, pi, _lr(it_count))
+				X = self._simple_gradient(X, S, P, _lr(it_count))
 			elif x_opt_method == 1:
-				X = self._PSO(X, S, pi)
+				X = self._PSO(X, S, P)
 			elif x_opt_method == 2:
 				base_temp = 100
-				X = self._Metropolis(X,S,pi, temp=100/(1 + it_count//25))
+				X = self._Metropolis(X,S,P, temp=100/(1 + it_count//25))
 			elif x_opt_method ==3:
-				#X, _ = SHOT.min_PWD(self.cregions, pi, 1, verbose)
-				# X, _ = GB.min_PWD(self.cregions, pi, 1, verbose)
-				X, _ = CPLX.min_PWD(self.cregions, pi)
+				X, _ = CPLX.min_PWD(self.cregions, P, policy_type)
 			Xs.append(np.copy(X))
-			rp = MRP.RandomRP(pi)
+			if policy_type == 0:
+				rp = MRP.RandomRP(P)
+			elif policy_type == 1:
+				rp = MRP.MarkovianRP(P)
+
 			S =  XtoS(X,v)
 			W = self.ps.calc_avg_wait(S, rp)
 			if verbose:
-				print('Transition probabilities: ', pi)
+				print('Transition probabilities: ', P)
 				print('Points: ', X)
 				print("Optimized Waiting Time: %.4f"%(W))
 			it_count += 1
 			it_wo_improvement += 1
 			if  W < min_W:
 				min_W = W
-				argmin= (X, pi)
+				argmin= (X, P)
 				it_wo_improvement = 0
 			eps = 0.001
 			if abs(W - Wprev) <= eps:

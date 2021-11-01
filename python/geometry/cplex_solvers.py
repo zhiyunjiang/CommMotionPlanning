@@ -5,16 +5,31 @@ import numpy as np
 from docplex.mp.model import Model
 from docplex.mp.constr import QuadraticConstraint, ComparisonType
 
-def min_PWD(regions, pi):
+import sys  
+from pathlib import Path
+path = Path(__file__)
+top_dir = path.parent.parent
+sys.path.insert(0, str(top_dir.absolute())+"/utils")
+import fssmc as fmc
 
-	mdl = Model(name='min_PWD_cplx')
+def min_PWD(regions, W, policy_type = 0):
 	n_regions = len(regions)
+	
+	if policy_type == 0:
+		pi = W
+		P = np.tile(pi,(n_regions,1))
+	elif policy_type == 1:
+		P = W
+		pi = fmc.stationary(P)
+		
+	
+	mdl = Model(name='min_PWD_cplx')
 	s=[]
 	k=[]
 	for i in range(n_regions):
 		for j in range(i+1, n_regions):
 			s.append(mdl.continuous_var())
-			k.append(pi[i]*pi[j])
+			k.append(pi[i]*P[i,j])
 
 	mdl.minimize(mdl.sum([k[i]*s[i] for i in range(len(s))]))
 

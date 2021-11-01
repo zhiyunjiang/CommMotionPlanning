@@ -180,8 +180,8 @@ def plotCFwithOverlay(n, tjcps, pjcps, qBase, region, els = None, pi = None, ax 
 	
 	
 
-def calc_AORP(dt_sys, vel, method = 3, X0 = None):
-	W, pi, X = dt_sys.optimize(x_opt_method=method, do_plot = False, verbose=False, v=vel, X0 = X0)
+def calc_AORP(dt_sys, vel, method = 3, X0 = None, policy_type=0):
+	W, pi, X = dt_sys.optimize(x_opt_method=method, do_plot = False, policy_type = policy_type, verbose=False, v=vel, X0 = X0)
 	AORP = {'WT': W, 'X': X, 'pi': pi}
 	return AORP
 

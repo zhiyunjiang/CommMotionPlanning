@@ -16,21 +16,21 @@ class MarkovianRP:
 
 		return np.random.choice(n, p=probs)
 
-	#STATIC FUNCTIONS#
-	def _is_valid_dist(pi):
-		return  ( np.sum(pi) == 1 and (pi >0).all() )
-
 class RandomRP(MarkovianRP):
 
 	def __init__(self, pi):
 		#make sure it's in the right shape and that it's a numpy array
 		self.pi = np.reshape( pi, (len(pi), 1) )
 		#verify legitimate probaility distribution
-		#assert MarkovianRP._is_valid_dist(self.pi), "Invalid probability distribution: " + str(self.pi)
+		#assert RandomRP._is_valid_dist(self.pi), "Invalid probability distribution: " + str(self.pi)
 
 		#create a P from the pi
 		P = np.tile(pi, (len(pi), 1))
 		super().__init__(P)
+
+	#STATIC FUNCTIONS#
+	def _is_valid_dist(pi):
+		return  ( np.sum(pi) == 1 and (pi >0).all() )
 
 #build a policy which is strictly proportional to lambdas
 def build_proportional_policy(ls):
