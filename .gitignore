@@ -10,3 +10,4 @@ __pycache__/
 *.eps
 *.log
 python/.ipynb_checkpoints/**
+*.npz

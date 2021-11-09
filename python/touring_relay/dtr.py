@@ -54,7 +54,6 @@ class DTR:
 		self.cregions[rid] = PC.PointCloud(self.Xis[rid]['points']) 
 		self.cregions[rid].partition(algo=4, alpha = 0.5/self.channels[rid].res)
 
-	#TODO - generalize to handle general Markovian policy
 	def optimize(self, do_plot=True, x_opt_method = 3, policy_type = 0, verbose = False, v=1, X0 = None):
 		converged = False
 		#initialize policy and polling locations
@@ -83,8 +82,6 @@ class DTR:
 			#Now update the coordinates
 			if x_opt_method == 0:
 				X = self._simple_gradient(X, S, P, _lr(it_count))
-			elif x_opt_method == 1:
-				X = self._PSO(X, S, P)
 			elif x_opt_method == 2:
 				base_temp = 100
 				X = self._Metropolis(X,S,P, temp=100/(1 + it_count//25))
@@ -137,6 +134,7 @@ class DTR:
 		if save:
 			plt.savefig('sim_pairs_%d_pth_%.2f_gammath_%d'%(self.n, self.p_th, self.gamma_th),format='png')
 					
+	# Private Functions
 
 	def _simple_gradient(self, X, S, pi, lr):
 		Xnext = np.copy(X)
@@ -177,9 +175,6 @@ class DTR:
 				neighbor = idx + neighborhood[neighbor_idx]
 				Xnext[i] = toRawFromGrid(self.channels[i].region, self.channels[i].res, neighbor)
 		return Xnext
-
-	def _PSO(self, X, S, pi):
-		return X
 
 	def _pick_random_X(self):
 		X = np.zeros((len(self.Xis), 2))

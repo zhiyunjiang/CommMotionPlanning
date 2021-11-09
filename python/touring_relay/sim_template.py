@@ -130,15 +130,15 @@ def plot_bs(qBase, ax):
 	n = len(qBase)//2
 	for i in range(n):
 		ax.scatter([qBase[2*i][0]], [qBase[2*i][1]],
-		color=COLORS[i], marker='v', s=200, edgecolor='k', zorder=200)
+		color=COLORS[i], marker='v', s=12*ms, edgecolor='k', zorder=200)
 		ax.scatter([qBase[2*i+1][0]], [qBase[2*i+1][1]],
-		color=COLORS[i], marker='^', s=200, edgecolor='k', zorder=200)
+		color=COLORS[i], marker='^', s=12*ms, edgecolor='k', zorder=200)
 
 	#dummy series for legend formatting
-	ax.scatter([-100], [-100], marker='v', s=10*ms, color='w', edgecolor='k', label='Source')
-	ax.scatter([-100], [-100], marker='^', s=10*ms, color='w', edgecolor='k', label='Destination')
+	ax.scatter([-100], [-100], marker='v', s=12*ms, color='w', edgecolor='k', label='Source')
+	ax.scatter([-100], [-100], marker='^', s=12*ms, color='w', edgecolor='k', label='Destination')
 
-def plot_relay_regions(n, tjcps, pjcps, els, pi, ax):
+def plot_relay_regions(n, tjcps, pjcps, rhos, pi, ax):
 	for i in range(n):
 		#plot the true field
 		pts = tjcps[i]
@@ -149,13 +149,13 @@ def plot_relay_regions(n, tjcps, pjcps, els, pi, ax):
 		ax.plot(pts[:,0],  pts[:,1], '.', color='k', alpha=0.1)
 		#dummy series for better legend formatting
 		s_label = 'Relay Region %d'%(i+1)
-		if els is not None:
-			s_label += ' ($\\lambda_%d = %.2f$, $\\tilde{\\pi}_%d = %.2f$)'%(i+1, els[i], i+1, pi[i])
+		if rhos is not None:
+			s_label += ' ($\\rho_%d = %.2f$, $\\tilde{\\pi}_%d = %.2f$)'%(i+1, rhos[i], i+1, pi[i])
 
 		ax.plot([-100], [-100], '.', color=COLORS[i], markersize=ms, label=s_label)
 
 	#dummy series for label
-	ax.plot([-1000],  [-1000], '.', color='k', markersize=ms, alpha=0.25, label='Predicted Relay Regions')
+	ax.plot([-1000],  [-1000], '.', color='k', markersize=ms, alpha=0.75, label='Predicted Relay Regions')
 
 def set_lims(region, ax):
 	ax.set_xlim(region[1],region[0])
@@ -165,12 +165,12 @@ def label_axes(ax):
 	ax.set_xlabel('x (m)')
 	ax.set_ylabel('y (m)')
 
-def plotCFwithOverlay(n, tjcps, pjcps, qBase, region, els = None, pi = None, ax = None):
+def plotCFwithOverlay(n, tjcps, pjcps, qBase, region, rhos = None, pi = None, ax = None):
 	if (ax is None):
 		fig = plt.figure(figsize=(15,15))
 		ax = fig.add_axes([0,0,1,1])
 	
-	plot_relay_regions(n, tjcps, pjcps, els, pi, ax)
+	plot_relay_regions(n, tjcps, pjcps, rhos, pi, ax)
 
 	plot_bs(qBase, ax)
 
@@ -185,17 +185,92 @@ def calc_AORP(dt_sys, vel, method = 3, X0 = None, policy_type=0):
 	AORP = {'WT': W, 'X': X, 'pi': pi}
 	return AORP
 
-def plot_regional_decomposition(dt_sys, tjcps, pjcps, qBase, region, els=None, pi = None, ax = plt):
-	plotCFwithOverlay(dt_sys.n, tjcps, pjcps, qBase, region, els, pi, ax)
+def plot_regional_decomposition(dt_sys, tjcps, pjcps, qBase, region, rhos=None, pi = None, ax = plt):
+	plotCFwithOverlay(dt_sys.n, tjcps, pjcps, qBase, region, rhos, pi, ax)
 	
 	for creg in dt_sys.cregions:
 	    	creg.plot_polys(ax = ax)
 
-def plot_AORP_W_TSPN(dt_sys, AORP, TSPNP, tjcps, pjcps, qBase, region, els, pi):
+def plot_AORPT(dt_sys, AORPT, tjcps, pjcps, qBase, region, rhos, ax = None):
+	if ax is None:
+		fig, ax = plt.subplots(1,1, figsize=(12,12))
+	seq = AORPT['seq']
+	n = dt_sys.n
+	P_table = np.zeros((n,n))
+	empty =0
+	ls  = len(seq)
+	for i in range(ls):
+	    if seq[i] != seq[(i+1)%ls]:
+	        P_table[seq[i], seq[(i+1)%ls]]+=1
+	    else:
+	        empty +=1
+	non_empty = ls - empty
+
+	#now get counts
+	counts = np.sum(P_table, axis=0)#either axis will work
+	pi_obs = counts/non_empty
+
+	#and probability transitions
+	P_table = (P_table.T/np.sum(P_table, axis=1)).T
+
+	plotCFwithOverlay(dt_sys.n, tjcps, pjcps, qBase, region, rhos, pi_obs, ax=ax)
+	X=AORPT['X']
+	_plot_relay_points(X, ax)
+
+	arrow_step = 2
+	for i in range(n):
+		for j in range(i+1, n):
+			draw_ij = (P_table[i,j]  > 0)
+			draw_ji = (P_table[j,i]  > 0)
+			diff = X[i] - X[j]
+			thetaji = np.arctan2( diff[1], diff[0])
+			thetaij = np.arctan2(-diff[1], -diff[0])
+			dxij = arrow_step*np.cos(thetaij)
+			dyij = arrow_step*np.sin(thetaij)
+
+			dxji = arrow_step*np.cos(thetaji)
+			dyji = arrow_step*np.sin(thetaji)
+			if draw_ij or draw_ji:
+				ax.plot(X[[i,j], 0], X[[i,j], 1], 'k', linewidth=40/n)
+				# if draw_ij:
+				# 	ax.arrow(X[i, 0], X[i, 1], dxij, dyij, shape="left", width=0.5, color='k')
+				# elif draw_ji:
+				# 	ax.arrow(X[j, 0], X[j, 1], dxji, dyji, shape="left", width=0.5, color='k')
+
+	ax.plot([-1000, -900], [-1000, -1000], 'k', label='Routes', markersize = ms)
+	ax.invert_yaxis()
+	ax.set_title('AORPT')
+
+
+def plot_AORPT_W_TSPN(dt_sys, AORPT, TSPNP, tjcps, pjcps, qBase, region, rhos):
+	fig, (ax1, ax2) = plt.subplots(1,2, figsize=(32, 16))
+	plot_AORPT(dt_sys, AORPT, tjcps, pjcps, qBase, region, rhos, ax=ax2)
+
+	#plot the TSPNP
+	#plot_regional_decomposition(dt_sys, tjcps, pjcps, qBase, region, rhos, pi_obs, ax = ax1)
+	plotCFwithOverlay(dt_sys.n, tjcps, pjcps, qBase, region, ax=ax1)
+	X=TSPNP['X']
+	order = list(TSPNP['SEQ'])
+	base_width=40
+	n = dt_sys.n
+	order.append(0)#complete the loop
+	ax1.plot(X[order,0], X[order,1], 'k', linewidth = base_width/n, zorder=100, label='Route')
+	_plot_relay_points(X, ax1)
+	ax1.invert_yaxis()
+	ax1.set_title('TSPNP')
+
+	handles, labels = ax2.get_legend_handles_labels()
+	fig.legend(handles, labels, fontsize=fs, loc='upper center', bbox_to_anchor=[0.5,0.025], ncol=2)
+	#fig.subplots_adjust(wspace=0.12)
+	
+
+
+def plot_AORP_W_TSPN(dt_sys, AORP, TSPNP, tjcps, pjcps, qBase, region, rhos, pi):
 	fig, (ax1, ax2) = plt.subplots(1,2, figsize=(32, 16))
 
 	#Plot the AORP
-	plot_regional_decomposition(dt_sys, tjcps, pjcps, qBase, region, els, pi, ax = ax2)
+	# plot_regional_decomposition(dt_sys, tjcps, pjcps, qBase, region, rhos, pi, ax = ax2)
+	plotCFwithOverlay(dt_sys.n, tjcps, pjcps, qBase, region, rhos, pi, ax=ax2)
 	X=AORP['X']
 	_plot_relay_points(X, ax2)
 	pi = AORP['pi']
@@ -227,7 +302,8 @@ def plot_AORP_W_TSPN(dt_sys, AORP, TSPNP, tjcps, pjcps, qBase, region, els, pi):
 
 
 	#plot the TSPNP
-	plot_regional_decomposition(dt_sys, tjcps, pjcps, qBase, region, els, pi_obs, ax = ax1)
+	#plot_regional_decomposition(dt_sys, tjcps, pjcps, qBase, region, rhos, pi_obs, ax = ax1)
+	plotCFwithOverlay(dt_sys.n, tjcps, pjcps, qBase, region, rhos, pi, ax=ax1)
 	X=TSPNP['X']
 	order = list(TSPNP['SEQ'])
 	order.append(0)#complete the loop
@@ -392,6 +468,23 @@ def save_plt(name):
 	#box = ax.get_position()
 	#ax.set_position([0, 0, box.width*1.1, box.height*1.1])
 	plt.savefig(name, format='png', bbox_inches='tight')
+
+def asymmetry(qbs, rhos):
+	n = len(rhos)
+	rhos = rhos.reshape(n,1)
+
+	mid_pts = np.array([ (qbs[2*i] + qbs[2*i +1])/2 for i in range(n)])
+	scale = np.linalg.norm(np.max(mid_pts, axis = 0) - np.min(mid_pts, axis = 0))
+	rhos *= scale
+	
+	centroid = np.average(mid_pts, axis = 0)
+	rep_point = np.append(centroid, sum(rhos)/n)
+	points_3d = np.concatenate((mid_pts, rhos), axis = 1)
+	
+	#calc distances
+	dists = np.linalg.norm(points_3d - rep_point, axis = 1)
+	
+	return np.var(dists)
 #######################################################
 #######################################################
 # Helper functions
@@ -429,8 +522,8 @@ def field_to_pts(field, region, res):
 	return toRawFromGrid(region, res, idcs)
 
 def _plot_relay_points(X, ax = plt):
-	ax.plot(X[:,0], X[:,1], '*', markersize=25, markerfacecolor='palegreen', markeredgecolor='k', zorder = 101)
-	ax.plot([1000], [100], '*', markersize=35, markerfacecolor='palegreen', markeredgecolor='k', label='Relay Positions')
+	ax.plot(X[:,0], X[:,1], '*', markersize=ms, markerfacecolor='palegreen', markeredgecolor='k', zorder = 101)
+	ax.plot([1000], [100], '*', markersize=ms, markerfacecolor='palegreen', markeredgecolor='k', label='Relay Positions')
 	# ax.xlabel('x (m)')
 	# ax.ylabel('y (m)')
 

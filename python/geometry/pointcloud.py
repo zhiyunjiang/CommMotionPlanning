@@ -551,7 +551,7 @@ class Poly:
 			plot_points = self.points
 			p0 = self.points[0]
 			plot_points = np.concatenate((plot_points, [p0]), axis=0)
-			ax.plot(plot_points[:,0], plot_points[:,1], 'k-')
+			ax.plot(plot_points[:,0], plot_points[:,1], 'k-', linewidth = 5)
 			for hole in self.holes:
 				hole.plot(show_partition, ax)
 		
