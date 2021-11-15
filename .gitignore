@@ -11,3 +11,5 @@ __pycache__/
 *.log
 python/.ipynb_checkpoints/**
 *.npz
+*.pkl
+
