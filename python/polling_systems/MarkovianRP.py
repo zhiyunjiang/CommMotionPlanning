@@ -6,7 +6,7 @@ class MarkovianRP:
 		self.P = P # transition matrix
 		self.n = len(P)
 
-	def next(self,q, not_self=False):
+	def next(self,q, x = None, not_self=False):
 		probs = self.P[q,:]# get all columns associated with q
 		n = self.n
 		if not_self:

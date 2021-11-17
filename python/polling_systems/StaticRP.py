@@ -4,6 +4,12 @@ CYCLICAL AND ROUTING TABLE POLLING SYSTEM ROUTING POLICIES
 import numpy as np
 from collections import Counter
 
+#Import a few utility functions...
+import sys  
+from pathlib import Path
+sys.path.insert(0, "../utils")
+
+import fssmc
 
 class StaticRP:
 
@@ -13,7 +19,7 @@ class StaticRP:
 		self._cidx = -1
 	
 	#q parameter kept for compatibility with non-deterministic routing policies
-	def next(self, q=None):
+	def next(self, q=None, x=None):
 		self._cidx = (self._cidx + 1)%self.n
 		return self.seq[self._cidx]
 		
@@ -73,17 +79,14 @@ def _sequence_from_pi(pis, eps, use_pi_obs = False):
 		        if i != j:
 		            P[i,j] = pis[j]
 		    P[i,:] /= sum(P[i,:])
-		v, M = np.linalg.eig(P.T)
-
-		pis = M[:,0]/sum(M[:,0]) 
-		
-	expected_counts = length*np.array(pis)
+		pi = fssmc.stationary(P) 
+	
+	counts = np.rint(length*np.array(pis))
 	l_max = 1000
-	while not _expected_counts_OK(expected_counts, eps) and length <= l_max:
+	while not _counts_OK(counts, pis, eps) and length <= l_max:
 		length += 1
-		expected_counts = length*np.array(pis)
+		counts = np.rint(length*np.array(pis))
 		
-	counts = np.rint(expected_counts)
 	length = int(np.sum(counts))
 	#now apply the Golden ratio
 	phi_inv = 0.5*(np.sqrt(5) - 1)
@@ -102,10 +105,13 @@ def _sequence_from_pi(pis, eps, use_pi_obs = False):
 	return sequence
 
 	
-def _expected_counts_OK(ecnts, eps):
+def _counts_OK(cnts, pi, eps):
 	OK = True
-	for cnt in ecnts:
-		if np.rint(cnt) == 0 or ( (cnt%1) > eps and (cnt%1) < 1-eps):
+	emp_pi = cnts/np.sum(cnts)
+	n = len(cnts)
+	for i in range(n):
+		cnt = cnts[i]
+		if cnt == 0 or ( abs(pi[i] - emp_pi[i]) > eps):
 			OK = False
 			break
 	return OK

@@ -101,7 +101,7 @@ class PollingSystem:
 			print("Theoretical Waiting Time calculation only implemented for clyclic, random, and Markovian policies.\n")
 			return -1
 		
-	def simulate(self, rp, S, tmax, q = 0):
+	def simulate(self, rp, S, tmax, q = 0, fully_observed = True):
 		"""
 		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 		% simulate
@@ -114,6 +114,8 @@ class PollingSystem:
 		% S - nXn matrix of switching times
 		% tmax - simulatino duration
 		% q - initial queue being serviced
+		% fully_observed - if true, use actual queue lengths as state used for DP routing policy.
+		%				 	otherwise, use time since last service
 		%
 		% Output:
 		% xt - array of tuples (t, l1, ..., ln) with the first entry being a time stamp and 
@@ -142,6 +144,8 @@ class PollingSystem:
 		stage = 0
 		total_travel_time = 0
 
+		last_serviced = np.zeros(self.n)
+
 		Tcounts = np.zeros((self.n, self.n))
 		Tsums = np.zeros((self.n, self.n))
 		Tlast_visit = np.zeros(self.n)#technically off, but shouldn't make a big deal
@@ -161,13 +165,17 @@ class PollingSystem:
 				queues[q].start_service(t)
 				is_traveling = False
 			else:
+				last_serviced[q] = t
 				Tcounts[:,q]+=1
 				Tsums[:,q]+= t - Tlast_visit
 				Tlast_visit[q] = t
 
 				#decide where we're going next
 				q_prev = q
-				q = rp.next(q)
+				if fully_observed:
+					q = rp.next(q, xt[-1][2:])#pass state, used by dynamic policies
+				else:
+					q = rp.next(q, t - last_serviced)#pass state, used by dynamic policies
 				server_time = S[q_prev,q]
 				total_travel_time += server_time
 				is_traveling = True
