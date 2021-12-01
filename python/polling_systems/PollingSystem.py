@@ -217,6 +217,18 @@ class PollingSystem:
 		return term1 * term2
 
 
+	def stageTransitionRealization(q, q_lengths, q_next, S):
+		s = S[q, q_next]
+		total_time = s
+		#get new queue lengths once we arrive at the next queue
+		new_q_lengths = q_lengths + default_rng.poisson(self.Ls*s)
+		while new_q_lengths[q_next] >0:
+			t = self.beta*new_q_lengths[q_next]
+			total_time += t
+			new_q_lengths[q_next] = 0
+			new_q_lengths = new_q_lengths + default_rng.poisson(self.Ls*t)
+		return q_next, new_q_lengths, total_time
+
 	def plotWvsPi(self, S):
 		"""
 		%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

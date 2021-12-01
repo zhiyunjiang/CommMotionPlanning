@@ -24,7 +24,7 @@ import StaticRP as SRP
 import dtr
 from CoordTransforms import toRawFromGrid
 from CoordTransforms import toGridFromRaw
-fs = 50
+fs = 40
 ms = 50
 plt.rcParams.update({
     "text.usetex": False,
@@ -34,6 +34,7 @@ plt.rcParams.update({
     
 
 COLORS = ['xkcd:aqua', 'xkcd:coral', 'xkcd:wheat', 'xkcd:green', 'xkcd:orange', 'xkcd:azure', 'xkcd:yellow', 'xkcd:cyan']
+COLOR_NAMES = ["blue", "red", "yellow", "green", "orange", "azure", "bright yellow", "cyan"]
 def create_channels(cps, region, res, GAMMA_TH, sub_regions = None):
 	
 	if sub_regions is None:
@@ -130,13 +131,13 @@ def plot_bs(qBase, ax):
 	n = len(qBase)//2
 	for i in range(n):
 		ax.scatter([qBase[2*i][0]], [qBase[2*i][1]],
-		color=COLORS[i], marker='v', s=12*ms, edgecolor='k', zorder=200)
+		color=COLORS[i], marker='v', s=25*ms, edgecolor='k', zorder=200)
 		ax.scatter([qBase[2*i+1][0]], [qBase[2*i+1][1]],
-		color=COLORS[i], marker='^', s=12*ms, edgecolor='k', zorder=200)
+		color=COLORS[i], marker='^', s=25*ms, edgecolor='k', zorder=200)
 
 	#dummy series for legend formatting
-	ax.scatter([-100], [-100], marker='v', s=12*ms, color='w', edgecolor='k', label='Source')
-	ax.scatter([-100], [-100], marker='^', s=12*ms, color='w', edgecolor='k', label='Destination')
+	ax.plot([-100], [-100], 'v', markersize = ms, markerfacecolor='w', markeredgecolor='k', label='Source')
+	ax.plot([-100], [-100], '^', markersize = ms, markerfacecolor='w', markeredgecolor='k', label='Destination')
 
 def plot_relay_regions(n, tjcps, pjcps, rhos, pi, ax):
 	for i in range(n):
@@ -148,14 +149,15 @@ def plot_relay_regions(n, tjcps, pjcps, rhos, pi, ax):
 		pts = pjcps[i]
 		ax.plot(pts[:,0],  pts[:,1], '.', color='k', alpha=0.1)
 		#dummy series for better legend formatting
-		s_label = 'Relay Region %d'%(i+1)
+		s_label = 'True Relay Region %d'%(i+1)
+		#s_label = "$X_%d^\\mathrm{true}$"%(i)
 		if rhos is not None:
 			s_label += ' ($\\rho_%d = %.2f$, $\\tilde{\\pi}_%d = %.2f$)'%(i+1, rhos[i], i+1, pi[i])
 
-		ax.plot([-100], [-100], '.', color=COLORS[i], markersize=ms, label=s_label)
+		ax.plot([-100], [-100], 's', color=COLORS[i], markersize=ms-5, label=s_label)
 
 	#dummy series for label
-	ax.plot([-1000],  [-1000], '.', color='k', markersize=ms, alpha=0.75, label='Predicted Relay Regions')
+	ax.plot([-1000],  [-1000], 's', color='k', markersize=ms-5, alpha=0.75, label='Predicted Relay Regions')
 
 def set_lims(region, ax):
 	ax.set_xlim(region[1],region[0])
@@ -260,7 +262,7 @@ def plot_AORPT_W_TSPN(dt_sys, AORPT, TSPNP, tjcps, pjcps, qBase, region, rhos):
 	ax1.set_title('TSPNP')
 
 	handles, labels = ax2.get_legend_handles_labels()
-	fig.legend(handles, labels, fontsize=fs, loc='upper center', bbox_to_anchor=[0.5,0.025], ncol=2)
+	fig.legend(handles, labels, fontsize=fs-15, loc='upper center', bbox_to_anchor=[0.5,0.025], ncol=2)
 	#fig.subplots_adjust(wspace=0.12)
 	
 
@@ -290,7 +292,7 @@ def plot_AORP_W_TSPN(dt_sys, AORP, TSPNP, tjcps, pjcps, qBase, region, rhos, pi)
 	lws = [pi_obs[i]*P[i,j] for i in range(n) for j in range(i+1, n)]
 
 	base_width = 8/(2*np.max(lws))
-	min_width=0.2
+	min_width=0
 	for i in range(n):
 		for j in range(i+1, n):
 			ax2.plot(X[[i,j], 0], X[[i,j], 1], 'k', linewidth = max(2*base_width*pi_obs[i]*P[i,j], min_width) )
@@ -307,13 +309,18 @@ def plot_AORP_W_TSPN(dt_sys, AORP, TSPNP, tjcps, pjcps, qBase, region, rhos, pi)
 	X=TSPNP['X']
 	order = list(TSPNP['SEQ'])
 	order.append(0)#complete the loop
-	ax1.plot(X[order,0], X[order,1], 'k', linewidth = base_width/n, zorder=100, label='Route')
+	scale = 0.98#to handle stars
+	for j in range(n):
+		x1 = X[order[j]]
+		x2 = X[order[(j+1)]]
+		ax1.arrow(x1[0], x1[1], scale*(x2[0] - x1[0]), scale*(x2[1] - x1[1]), width = 0.6, length_includes_head = True, color="k", zorder=100)
+	# ax1.plot(X[order,0], X[order,1], 'k', linewidth = base_width/n, zorder=100, label='Route')
 	_plot_relay_points(X, ax1)
 	ax1.invert_yaxis()
 	ax1.set_title('TSPNP')
 
 	handles, labels = ax1.get_legend_handles_labels()
-	fig.legend(handles, labels, fontsize=fs, loc='upper center', bbox_to_anchor=[0.5,0.025], ncol=2)
+	fig.legend(handles, labels, fontsize=fs-5, loc='upper center', bbox_to_anchor=[0.5,0.025], ncol=4)
 	#fig.subplots_adjust(wspace=0.12)
 
 def pi_to_P(pi):
@@ -522,7 +529,7 @@ def field_to_pts(field, region, res):
 	return toRawFromGrid(region, res, idcs)
 
 def _plot_relay_points(X, ax = plt):
-	ax.plot(X[:,0], X[:,1], '*', markersize=ms, markerfacecolor='palegreen', markeredgecolor='k', zorder = 101)
+	ax.plot(X[:,0], X[:,1], '*', markersize=ms+5, markerfacecolor='palegreen', markeredgecolor='k', zorder = 101)
 	ax.plot([1000], [100], '*', markersize=ms, markerfacecolor='palegreen', markeredgecolor='k', label='Relay Positions')
 	# ax.xlabel('x (m)')
 	# ax.ylabel('y (m)')

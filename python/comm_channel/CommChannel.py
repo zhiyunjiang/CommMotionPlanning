@@ -171,8 +171,8 @@ class CommChannel:
 		"""
 		if sres is None:
 			sres = self.res
-		nx = ((self.region[0] - self.region[1])*sres)//1
-		ny = ((self.region[2] - self.region[3])*sres)//1
+		nx = int((self.region[0] - self.region[1])*sres)
+		ny = int((self.region[2] - self.region[3])*sres)
 		#avoid duplicates by sampling w/o replacement
 		samples = random.sample(range(nx*ny), n)
 		grid_pts = np.array([list(divmod(sample, ny)) for sample in samples])

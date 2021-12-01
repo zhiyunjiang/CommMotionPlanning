@@ -28,3 +28,19 @@ class DPRP:
 			q_lengths = x*self.lambdas
 
 		return self.fmap(q, q_lengths, self.lambdas, self.beta, self.S)
+
+
+
+#Potential DP Approach
+#1) For any initial state, find expected return time (e.g. (q, L_q|q))
+#2) Make cost integral of expected sum of queue lengths
+#3) initial state is also final state
+
+#Things that make the problem tricky
+#1) Stages are well defined but stage duration is not.
+#2) Countably infinite states
+#3) !!!Cost function is non-linear!!!
+
+#Possible ways to reduce state:
+#1) Find "equivalent" states
+#2) Ignore when buffer lengths are very high (will almost never be seen)
